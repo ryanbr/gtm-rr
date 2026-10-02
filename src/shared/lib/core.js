@@ -560,24 +560,13 @@ function consentRRGtmCore(options) {
                 guard = callback;
             }
             const fire = ( ) => {
-                // A real container that bound itself to this data layer will
-                // answer the callback when its own tags finish, and it read
-                // the page's function before this guard existed if it wrapped
-                // the push on top. Their own bookkeeping says when that has
-                // happened: bind() does
-                //   d.subscribers = (d.subscribers || 0) + 1
-                // on the entry named after the layer. One more subscriber
-                // than this resource accounted for means something else is
-                // live and answering, and the quiet thing is to leave it to
-                // them - two answers to one callback is a form that submits
-                // twice.
-                try {
-                    const live = registry[layer];
-                    if ( live !== null && typeof live === 'object' ) {
-                        if ( live.subscribers > subscribed ) { return; }
-                    }
-                } catch(ex) {
-                }
+                // Nothing here checks for a live container: by the time one
+                // could answer this callback, two other things have already
+                // settled it. The yield in handle() stands this resource
+                // aside on their bind, before the callback path is reached,
+                // and the guard above means whoever answers first wins. A
+                // check here as well was dead, and the mutation harness said
+                // so.
                 try {
                     guard.apply(guard, []);
                 } catch(ex) {

@@ -58,12 +58,6 @@ export default [
     },
 
     {
-        label: 'a live container is answered over',
-        file: CORE,
-        from: '                        if ( live.subscribers > subscribed ) { return; }',
-        to: '',
-    },
-    {
         label: 'no once-guard on the page callback',
         file: CORE,
         from: '                item.eventCallback = guard;',

@@ -35,8 +35,8 @@ uBlock Origin fetches user resources from the URLs in its hidden setting
 `userResourcesLocation` (Settings > Advanced > click `advanced settings`):
 
 ```
-https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.1.3/dist/googletagmanager_gtm.js
-https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.1.3/dist/ga-optout.js
+https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.1.4/dist/googletagmanager_gtm.js
+https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.1.4/dist/ga-optout.js
 ```
 
 The setting takes several whitespace-separated URLs.
