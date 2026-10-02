@@ -624,6 +624,18 @@ function consentRRGtmCore(options) {
 
     const entry = already ? registry[layer] : state();
 
+    // Their own entry carries more than these three - pruned, and whatever a
+    // feature of theirs parks on it - so a read of something else is worth a
+    // name.
+    if ( already === false ) {
+        try {
+            registry[layer] = watch(entry, 'layer', [
+                'subscribers', 'gtmDom', 'gtmLoad',
+            ]);
+        } catch(ex) {
+        }
+    }
+
     const install = ( ) => {
         if ( id === '' ) { return 'noid'; }
         if ( registry[id] !== undefined && registry[id] !== null ) {
@@ -711,6 +723,47 @@ function consentRRGtmCore(options) {
         unhide();
         announce();
     }
+
+    // And the registry itself, which their own code fills with far more than
+    // this does: ho("tcf"), ho("gth"), ho("mb"), ho("r"), ho("ads_pageview")
+    // and the sandboxed-JS semaphore are all created on demand by a feature
+    // of theirs, and a page or a tag template reading one gets nothing from
+    // here. Wrapped last, so everything this puts in it is already a name it
+    // knows, and with a set trap so a key written later - by a second
+    // container of theirs that was not replaced, say - is not then reported
+    // as missing.
+    const watchRegistry = ( ) => {
+        if ( debug === false ) { return; }
+        try {
+            if ( registry.consentRRGtmWatched === VERSION ) { return; }
+            const known = Object.create(null);
+            for ( const key of Object.keys(registry) ) { known[key] = true; }
+            known.consentRRGtmWatched = true;
+            Object.defineProperty(registry, 'consentRRGtmWatched', {
+                value: VERSION,
+                enumerable: false,
+            });
+            w.google_tag_manager = new w.Proxy(registry, {
+                get(target, property, receiver) {
+                    if ( typeof property === 'string' ) {
+                        if ( known[property] === undefined ) {
+                            report('google_tag_manager', property);
+                        }
+                    }
+                    return Reflect.get(target, property, receiver);
+                },
+                set(target, property, value, receiver) {
+                    if ( typeof property === 'string' ) {
+                        known[property] = true;
+                    }
+                    return Reflect.set(target, property, value, receiver);
+                },
+            });
+        } catch(ex) {
+        }
+    };
+
+    watchRegistry();
 
     return {
         id, layer, path, hooked, installed, container, registry,

@@ -378,6 +378,14 @@ function consentRRGtmCore(options) {
         return entry;
     };
     const entry = already ? registry[layer] : state();
+    if ( already === false ) {
+        try {
+            registry[layer] = watch(entry, 'layer', [
+                'subscribers', 'gtmDom', 'gtmLoad',
+            ]);
+        } catch(ex) {
+        }
+    }
     const install = ( ) => {
         if ( id === '' ) { return 'noid'; }
         if ( registry[id] !== undefined && registry[id] !== null ) {
@@ -457,6 +465,37 @@ function consentRRGtmCore(options) {
         unhide();
         announce();
     }
+    const watchRegistry = ( ) => {
+        if ( debug === false ) { return; }
+        try {
+            if ( registry.consentRRGtmWatched === VERSION ) { return; }
+            const known = Object.create(null);
+            for ( const key of Object.keys(registry) ) { known[key] = true; }
+            known.consentRRGtmWatched = true;
+            Object.defineProperty(registry, 'consentRRGtmWatched', {
+                value: VERSION,
+                enumerable: false,
+            });
+            w.google_tag_manager = new w.Proxy(registry, {
+                get(target, property, receiver) {
+                    if ( typeof property === 'string' ) {
+                        if ( known[property] === undefined ) {
+                            report('google_tag_manager', property);
+                        }
+                    }
+                    return Reflect.get(target, property, receiver);
+                },
+                set(target, property, value, receiver) {
+                    if ( typeof property === 'string' ) {
+                        known[property] = true;
+                    }
+                    return Reflect.set(target, property, value, receiver);
+                },
+            });
+        } catch(ex) {
+        }
+    };
+    watchRegistry();
     return {
         id, layer, path, hooked, installed, container, registry,
         hiding: ( ) => hiding,

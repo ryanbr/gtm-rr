@@ -301,8 +301,16 @@ export default [
     {
         label: 'debug: the proxy changes what a page reads',
         file: CORE,
-        from: '                    return Reflect.get(target, property, receiver);',
-        to: '                    return undefined;',
+        from: `                        if ( mine[property] === undefined ) {
+                            report(where, property);
+                        }
+                    }
+                    return Reflect.get(target, property, receiver);`,
+        to: `                        if ( mine[property] === undefined ) {
+                            report(where, property);
+                        }
+                    }
+                    return undefined;`,
     },
     {
         label: 'debug: ga calls are not named',
@@ -336,6 +344,40 @@ export default [
         file: CORE,
         from: "                ' from=' + caller()",
         to: "                ''",
+    },
+
+    {
+        label: 'debug: the registry is not watched',
+        file: CORE,
+        from: '    watchRegistry();',
+        to: '',
+    },
+    {
+        label: 'debug: the layer entry is not watched',
+        file: CORE,
+        from: `            registry[layer] = watch(entry, 'layer', [
+                'subscribers', 'gtmDom', 'gtmLoad',
+            ]);`,
+        to: '            registry[layer] = entry;',
+    },
+    {
+        label: 'debug: a later key is reported as missing',
+        file: CORE,
+        from: `                set(target, property, value, receiver) {
+                    if ( typeof property === 'string' ) {
+                        known[property] = true;
+                    }
+                    return Reflect.set(target, property, value, receiver);
+                },`,
+        to: `                set(target, property, value, receiver) {
+                    return Reflect.set(target, property, value, receiver);
+                },`,
+    },
+    {
+        label: 'debug: the registry is wrapped twice',
+        file: CORE,
+        from: "            if ( registry.consentRRGtmWatched === VERSION ) { return; }",
+        to: '',
     },
 
     // The opt-out, which is a different job in the same repo.

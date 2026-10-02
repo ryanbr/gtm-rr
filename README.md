@@ -96,6 +96,24 @@ script asked:
 
 On a page that works, that is nothing at all.
 
+What it watches, which is everything this resource hands the page:
+
+- `google_tag_manager` itself. Their own code fills it on demand -
+  `ho("tcf")`, `ho("gth")`, `ho("mb")`, `ho("r")`, `ho("ads_pageview")`, the
+  sandboxed-JS semaphore - and none of that is here.
+- the container object under the id, and the data model on it.
+- the entry named after the data layer, which theirs carries more fields on.
+- every `gtag` command that went nowhere, and every `ga` call.
+
+A key written into the registry *afterwards* - by a second container of
+theirs that was not replaced, say - is not then reported as missing.
+
+Two absences are deliberate and stay quiet, because they are documented
+decisions rather than gaps: **`google_tag_data`**, which their code creates
+only where a consent API is used, and **`gaGlobal`**, their visitor-id cache.
+Reporting those would fire on every consent-managed site and tell you only
+what this page already says.
+
 A command's arguments are echoed because they *are* its value - the name alone
 rarely says whether it mattered, and `args=["update",{ad_storage:"granted"}]`
 is the difference between a site firing an event and a site waiting for tags

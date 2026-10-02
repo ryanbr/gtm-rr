@@ -695,6 +695,47 @@ describe('googletagmanager_gtm', ( ) => {
         assert.equal(out.length, before_);
     });
 
+    it('names what a page reads off the registry and the layer entry', ( ) => {
+        let out;
+        const w = boot({ before: w_ => { out = lines(w_); snippet()(w_); } });
+        // Their own registry is filled on demand by their features -
+        // ho("tcf"), ho("gth"), ho("mb"), ho("r"), ho("ads_pageview") - and
+        // the entry named after the data layer carries more than three
+        // fields. None of it is here, and a page reading one gets nothing.
+        w.google_tag_manager.tcf;
+        w.google_tag_manager.SANDBOXED_JS_SEMAPHORE;
+        w.google_tag_manager.dataLayer.pruned;
+        const said = out.join(' | ');
+        assert.ok(said.includes(' missing=google_tag_manager.tcf'), said);
+        assert.ok(
+            said.includes(' missing=google_tag_manager.SANDBOXED_JS_SEMAPHORE'),
+            said
+        );
+        assert.ok(said.includes(' missing=layer.pruned'), said);
+    });
+
+    it('says nothing about what this put in the registry, or what else did',
+    ( ) => {
+        let out;
+        const w = boot({ before: w_ => { out = lines(w_); snippet()(w_); } });
+        const before_ = out.length;
+        // Everything this registered is a name it knows.
+        w.google_tag_manager[ID];
+        w.google_tag_manager.dataLayer;
+        w.google_tag_manager.rm;
+        assert.equal(out.length, before_, out.slice(before_).join(' | '));
+        // And a key written afterwards - by a second container of theirs that
+        // was not replaced, say - is not then reported as missing.
+        w.eval('window.google_tag_manager.somethingElse = { theirs: 1 };');
+        w.google_tag_manager.somethingElse;
+        assert.equal(out.length, before_, out.slice(before_).join(' | '));
+        // Watched or not, the registry is still theirs to read and write.
+        assert.deepEqual(
+            Object.keys(w.google_tag_manager).sort(),
+            [ ID, 'dataLayer', 'rm', 'somethingElse' ].sort()
+        );
+    });
+
     it('leaves what it does provide unremarked, and working', ( ) => {
         let out;
         const w = boot({
@@ -799,6 +840,18 @@ describe('googletagmanager_gtm', ( ) => {
         });
         w.ga('send', 'pageview');
         assert.ok(out.some(l => l.includes(' missing=ga.send')), out.join(' | '));
+    });
+
+    it('does not wrap the registry again on a second injection', ( ) => {
+        const w = boot({ before: snippet() });
+        const first = w.google_tag_manager;
+        w.eval(neutered);
+        // Wrapping a wrapper works and reports nothing wrong, which is why
+        // this is about identity: left unguarded, every injection adds
+        // another layer to read through and the page's own reference stops
+        // matching what is on the window.
+        assert.equal(w.google_tag_manager, first);
+        assert.ok(w.google_tag_manager[ID]);
     });
 
     it('does nothing the second time it is injected', async ( ) => {
