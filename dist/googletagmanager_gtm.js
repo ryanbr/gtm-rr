@@ -66,14 +66,14 @@ function consentRRGtmCore(options) {
     const setting = ( ) => {
         try {
             const value = w.localStorage.getItem('gtm-rr-debug');
-            if ( value === null ) { return 'on'; }
+            if ( value === null ) { return 'verbose'; }
             const wanted = String(value).toLowerCase();
             if ( wanted === 'off' || wanted === '0' ) { return 'off'; }
-            if ( wanted === 'verbose' ) { return 'verbose'; }
-            return 'on';
+            if ( wanted === 'quiet' ) { return 'quiet'; }
+            return 'verbose';
         } catch(ex) {
         }
-        return 'on';
+        return 'verbose';
     };
     const level = setting();
     const debug = level !== 'off';

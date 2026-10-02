@@ -24,9 +24,16 @@ name. A wrong token injects nothing and says nothing.
 
 ## Fidelity comes from evidence, not from documentation
 
-Every structure in `gtm-core.js` was read off two real containers
-(`GTM-KJZD388`, `GTM-NSXXFR`, ~540KB each, fetched into a scratchpad and never
-committed), and they agreed on all of it. Their own minified names are quoted in
+Every structure in `gtm-core.js` and `shared/lib/core.js` was read off three
+real containers (`GTM-KJZD388`, `GTM-NSXXFR`, `GTM-W4F8P893` - 540, 537 and
+402KB - fetched into a scratchpad and never committed) and a served `gtag/js`,
+and they agreed on all of it.
+
+**The minified names move between builds.** The container object is built by
+`RU()` in two of those and `LU()` in the third; the data model is `fA` and then
+`cA`; the callback gate is `Do` and then `Co`. The names in the comments are
+there so a reader can find the code again in *those* samples - when checking a
+new one, match the shape. Their own minified names are quoted in
 the file's header so the next reader can find them again:
 
 - `RU()` builds what goes into `google_tag_manager[<id>]`:

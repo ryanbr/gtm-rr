@@ -200,14 +200,32 @@ export default [
     {
         label: 'debug: off by default',
         file: CORE,
-        from: "            if ( value === null ) { return 'on'; }",
+        from: "            if ( value === null ) { return 'verbose'; }",
         to: "            if ( value === null ) { return 'off'; }",
+    },
+    {
+        label: 'debug: default is only names',
+        file: CORE,
+        from: "            if ( value === null ) { return 'verbose'; }",
+        to: "            if ( value === null ) { return 'quiet'; }",
+    },
+    {
+        label: 'debug: cannot be quietened',
+        file: CORE,
+        from: "            if ( wanted === 'quiet' ) { return 'quiet'; }",
+        to: '',
     },
     {
         label: 'debug: cannot be silenced',
         file: CORE,
         from: "            if ( wanted === 'off' || wanted === '0' ) { return 'off'; }",
         to: '',
+    },
+    {
+        label: 'debug: page data echoed at the quiet level',
+        file: CORE,
+        from: "    const verbose = level === 'verbose';",
+        to: "    const verbose = level !== 'off';",
     },
     {
         label: 'debug: verbose by default',

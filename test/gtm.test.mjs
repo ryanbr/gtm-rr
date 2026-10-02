@@ -45,6 +45,11 @@ const boot = (options = {}) => {
     return dom.window;
 };
 
+// The one line written as the resource starts. At the default level a
+// command the page already pushed can be reported before it, so it is found
+// rather than assumed to be first.
+const summary = out => out.find(line => line.includes(' push=')) || '';
+
 const lines = w => {
     const out = [];
     w.console.info = line => { out.push(line); };
@@ -316,7 +321,7 @@ describe('googletagmanager_gtm', ( ) => {
                     'window.gtag("config", "G-KQ9NC85WD9");');
             },
         });
-        assert.ok(out[0].includes(' loader=/gtag/js'), out[0]);
+        assert.ok(summary(out).includes(' loader=/gtag/js'), out.join(' | '));
         const container = w.google_tag_manager['G-KQ9NC85WD9'];
         // Their gtag/js build of RU() has neither of the container's two
         // html handlers.
@@ -463,7 +468,7 @@ describe('googletagmanager_gtm', ( ) => {
         assert.equal(w.dataLayer.hide.end, null);
         assert.equal(w.document.documentElement.className.includes('async-hide'),
             false);
-        assert.ok(out[0].includes(' hide=ended'), out[0]);
+        assert.ok(summary(out).includes(' hide=ended'), summary(out));
     });
 
     it('leaves the hiding to a container that is still expected', ( ) => {
@@ -485,7 +490,7 @@ describe('googletagmanager_gtm', ( ) => {
         assert.equal(w.dataLayer.hide[ID], false);
         assert.equal(w.ended, undefined);
         assert.equal(typeof w.dataLayer.hide.end, 'function');
-        assert.ok(out[0].includes(' hide=waiting'), out[0]);
+        assert.ok(summary(out).includes(' hide=waiting'), summary(out));
     });
 
     it('does not touch a hiding that is not this container own', ( ) => {
@@ -501,7 +506,7 @@ describe('googletagmanager_gtm', ( ) => {
         });
         assert.equal(w.ended, undefined);
         assert.equal(w.dataLayer.hide['GTM-SOMEONEELSE'], true);
-        assert.ok(out[0].includes(' hide=theirs'), out[0]);
+        assert.ok(summary(out).includes(' hide=theirs'), summary(out));
     });
 
     it('keeps the ga noop uBO own resource puts up', ( ) => {
@@ -540,7 +545,7 @@ describe('googletagmanager_gtm', ( ) => {
             },
         });
         assert.equal(w.dataLayer.mine, true);
-        assert.ok(out[0].includes(' push=hooked'), out[0]);
+        assert.ok(summary(out).includes(' push=hooked'), summary(out));
         // Wrapped, not replaced: their own push still runs and its return
         // value still comes back.
         const calls = [];
@@ -565,7 +570,7 @@ describe('googletagmanager_gtm', ( ) => {
         // growing a method it never had.
         assert.equal(w.dataLayer.mine, true);
         assert.equal(w.dataLayer.push, undefined);
-        assert.ok(out[0].includes(' push=nopush'), out[0]);
+        assert.ok(summary(out).includes(' push=nopush'), summary(out));
         // The container still goes up, which is the other half of the job.
         assert.ok(w.google_tag_manager[ID]);
     });
@@ -577,9 +582,10 @@ describe('googletagmanager_gtm', ( ) => {
         } catch(ex) {
         }
     };
-    const debugOn = ( ) => undefined;
     const debugOff = w_ => debugLevel(w_, 'off');
-    const debugVerbose = w_ => debugLevel(w_, 'verbose');
+    const debugQuiet = w_ => debugLevel(w_, 'quiet');
+    // The default, so asking for it is asking for nothing.
+    const debugVerbose = ( ) => undefined;
 
     it('says nothing once a visitor has silenced it', ( ) => {
         let out;
@@ -590,14 +596,14 @@ describe('googletagmanager_gtm', ( ) => {
         w.google_tag_manager[ID].somethingWeDoNotHave;
         w.google_tag_manager[ID].dataLayer.alsoNot;
         assert.equal(out.length, 1);
-        assert.ok(out[0].includes(' debug=off'), out[0]);
+        assert.ok(summary(out).includes(' debug=off'), summary(out));
     });
 
     it('names what a page reads without being asked to', ( ) => {
         let out;
         const w = boot({ before: w_ => { out = lines(w_); snippet()(w_); } });
         // The default: the part of their API a site wanted and did not get.
-        assert.ok(out[0].includes(' debug=on'), out[0]);
+        assert.ok(summary(out).includes(' debug=verbose'), summary(out));
         w.google_tag_manager[ID].SANDBOXED_JS_SEMAPHORE;
         assert.ok(
             out.some(l => l.includes(' missing=container.SANDBOXED_JS_SEMAPHORE')),
@@ -605,9 +611,10 @@ describe('googletagmanager_gtm', ( ) => {
         );
     });
 
-    it('keeps the page own data out of the console by default', async ( ) => {
+    it('keeps the page own data out of the console when asked to quieten',
+    async ( ) => {
         let out;
-        const w = bootGtag(w_ => { out = lines(w_); });
+        const w = bootGtag(w_ => { debugQuiet(w_); out = lines(w_); });
         w.gtag('set', 'user_data', { email: 'someone@example.com' });
         w.gtag('event', 'purchase', { transaction_id: 'T-12345' });
         // ga is reported by default - a page calling it means analytics.js
@@ -629,9 +636,9 @@ describe('googletagmanager_gtm', ( ) => {
     it('names what a page reads that is not here', ( ) => {
         let out;
         const w = boot({
-            before: w_ => { debugOn(w_); out = lines(w_); snippet()(w_); },
+            before: w_ => { out = lines(w_); snippet()(w_); },
         });
-        assert.ok(out[0].includes(' debug=on'), out[0]);
+        assert.ok(summary(out).includes(' debug=verbose'), summary(out));
         const container = w.google_tag_manager[ID];
         // Their own registry carries more than this provides - the sandboxed
         // JS semaphore, their tag queue, their macro cache - and a page or a
@@ -654,7 +661,7 @@ describe('googletagmanager_gtm', ( ) => {
     it('leaves what it does provide unremarked, and working', ( ) => {
         let out;
         const w = boot({
-            before: w_ => { debugOn(w_); out = lines(w_); snippet()(w_); },
+            before: w_ => { out = lines(w_); snippet()(w_); },
         });
         const container = w.google_tag_manager[ID];
         container.dataLayer.set('page', { title: 'Home' });
@@ -687,7 +694,7 @@ describe('googletagmanager_gtm', ( ) => {
     it('shows no value for a property, because there is none', ( ) => {
         let out;
         const w = boot({
-            before: w_ => { debugOn(w_); out = lines(w_); snippet()(w_); },
+            before: w_ => { out = lines(w_); snippet()(w_); },
         });
         w.google_tag_manager[ID].somethingMissing;
         const line = out.find(l => l.includes(' missing=container.somethingMissing'));
@@ -751,7 +758,7 @@ describe('googletagmanager_gtm', ( ) => {
     it('names what a page called ga with', ( ) => {
         let out;
         const w = boot({
-            before: w_ => { debugOn(w_); out = lines(w_); snippet()(w_); },
+            before: w_ => { out = lines(w_); snippet()(w_); },
         });
         w.ga('send', 'pageview');
         assert.ok(out.some(l => l.includes(' missing=ga.send')), out.join(' | '));
@@ -789,8 +796,8 @@ describe('googletagmanager_gtm', ( ) => {
         const w = boot({ html, before: w_ => { out = lines(w_); snippet()(w_); } });
         // No id to be had, so no container is registered under one - but the
         // push contract, which is what a page waits on, still works.
-        assert.ok(out[0].includes(' id=unknown'), out[0]);
-        assert.ok(out[0].includes(' container=noid'), out[0]);
+        assert.ok(summary(out).includes(' id=unknown'), summary(out));
+        assert.ok(summary(out).includes(' container=noid'), summary(out));
         assert.equal(typeof w.dataLayer.push, 'function');
     });
 
@@ -803,7 +810,7 @@ describe('googletagmanager_gtm', ( ) => {
             '[gtm-rr] googletagmanager_gtm ' + versions.gtm +
             ' loader=/gtm.js id=' + ID +
             ' layer=dataLayer push=hooked container=installed hide=absent' +
-            ' debug=on'
+            ' debug=verbose'
         );
     });
 });

@@ -83,51 +83,37 @@ three - and then answering the parts it has none for.
 
 ## When a page half-works
 
-The reporting is **on**. Anything a site asks for that this does not provide is
-named once, in the console, with which script asked:
-
-```
-[gtm-rr] googletagmanager_gtm 1.0.0 missing=container.SANDBOXED_JS_SEMAPHORE
-         id=G-KQ9NC85WD9 from=at https://site/tag.js:4:1
-[gtm-rr] googletagmanager_gtm 1.0.0 missing=ga.send
-         id=G-KQ9NC85WD9 from=at https://site/app.js:12:9
-```
-
-On a page that works, that is nothing at all.
-
-Two things are held back from the default, both because they would be noise or
-worse on every page, for everyone:
-
-- **what the page passed.** Those are the page's own data - a transaction id, a
-  `user_data` payload - and a console gets pasted into bug reports and
-  screenshots.
-- **a `gtag` command that went nowhere.** Most of them do, by design: that is
-  this resource working. A line each on every page view buries the ones that
-  matter.
-
-Ask for both when you are chasing something:
-
-```js
-localStorage.setItem('gtm-rr-debug', 'verbose')   // then reload
-```
+The reporting is **on**, and says everything it has. Anything a site asks for
+that this does not provide is named once, with what the page passed and which
+script asked:
 
 ```
 [gtm-rr] googletagmanager_gtm 1.0.0 missing=command.consent id=G-KQ9NC85WD9
          args=["update",{ad_storage:"granted"}] from=at https://site/app.js:12:9
+[gtm-rr] googletagmanager_gtm 1.0.0 missing=container.SANDBOXED_JS_SEMAPHORE
+         id=G-KQ9NC85WD9 from=at https://site/tag.js:4:1
 ```
 
-A command's arguments are echoed because they *are* its value. A property's are
-not: a missing property had no value to read, and an `args=` there would be one
-this resource invented. What is echoed is shallow and capped at 160 characters.
+On a page that works, that is nothing at all.
 
-To silence it entirely:
+A command's arguments are echoed because they *are* its value - the name alone
+rarely says whether it mattered, and `args=["update",{ad_storage:"granted"}]`
+is the difference between a site firing an event and a site waiting for tags
+to start. A property's are not echoed: a missing property had no value to read,
+and an `args=` there would be one this resource invented. What is echoed is
+shallow and capped at 160 characters.
+
+Three levels:
 
 ```js
-localStorage.setItem('gtm-rr-debug', 'off')
+localStorage.setItem('gtm-rr-debug', 'quiet')   // names only, no page data
+localStorage.setItem('gtm-rr-debug', 'off')     // nothing, nothing wrapped
 ```
 
-which also stops anything being wrapped - that setting costs one storage read
-and nothing else.
+`quiet` drops the arguments and the commands that went nowhere, which is what
+to use if you would rather a console you paste somewhere did not carry a
+transaction id or a `user_data` payload. `off` stops anything being wrapped at
+all: one storage read and no more.
 
 Otherwise the objects handed to the page are watched through a get-only
 `Proxy`, so their keys, their values and their behaviour are unchanged: a page

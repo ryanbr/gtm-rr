@@ -9,8 +9,15 @@
     front doors, and their container picks between them with
       var c = cc(b, "GTM-") ? "/gtm.js" : "/gtag/js"
 
-    Read off GTM-KJZD388, GTM-NSXXFR and a served gtag/js, which agreed on
-    every structure below:
+    Read off GTM-KJZD388, GTM-NSXXFR, GTM-W4F8P893 and a served gtag/js, which
+    agreed on every structure below.
+
+    The minified names quoted here are from the first two, and they move
+    between builds: the container object is built by RU() in one and LU() in
+    another, the data model is fA and then cA, the callback gate is Do and
+    then Co. Match a structure by its shape when checking a new sample, never
+    by the name - 401KB of one and 540KB of another agreed on every shape and
+    on almost none of the names.
 
       the snippet              creates window.dataLayer and pushes
                                { "gtm.start": <ms>, event: "gtm.js" } before
@@ -166,44 +173,42 @@ function consentRRGtmCore(options) {
 
     const { id, layer, path } = settings();
 
-    // On, because a page that half-works is reported as "it half-works" and
-    // the useful question is which part of their API the site asked for that
-    // is not here. What that costs by default is one line per name, once, for
-    // something this does not provide - which on a working page is nothing at
-    // all.
+    // On, and saying everything it has: a page that half-works is reported
+    // as "it half-works", and the useful question is which part of their API
+    // the site asked for that is not here, and what it was trying to do with
+    // it. On a page that works it says nothing at all.
     //
-    // Two things are held back from the default, and both for the same
-    // reason: they would be noise or worse on every page, for everyone.
+    // Three levels, and the middle one is the default:
     //
-    //   the arguments a page passed    they are the page's data - a
-    //                                  transaction id, a user_data payload -
-    //                                  and a console is pasted into bug
-    //                                  reports and screenshots. Not echoed
-    //                                  unless asked for.
-    //   a command that went nowhere    most of them do, by design: that is
-    //                                  this resource working. A line each on
-    //                                  every page view buries the ones that
-    //                                  matter.
+    //   off       nothing, and nothing wrapped: one storage read and no more
+    //   quiet     the name of what was asked for, and who asked
+    //   verbose   those, plus the arguments the page passed, plus every
+    //             command that went nowhere - the default
     //
-    //   localStorage.setItem('gtm-rr-debug', 'verbose')   both of those too
-    //   localStorage.setItem('gtm-rr-debug', 'off')       nothing at all
+    //   localStorage.setItem('gtm-rr-debug', 'quiet')
+    //   localStorage.setItem('gtm-rr-debug', 'off')
     //
-    // Silenced, it costs one storage read: nothing is wrapped and nothing is
-    // watched. Otherwise the objects this hands the page are watched through
-    // a get-only Proxy, which leaves their keys, their values and their own
-    // behaviour alone - a page enumerating the container object still sees
-    // exactly what it would have.
+    // What verbose carries that quiet does not is the page's own data - a
+    // transaction id, a user_data payload, a path with an order number in it
+    // - because the arguments to a call are what the call was for, and
+    // without them the name of a missing thing often does not say whether it
+    // mattered. A console does get pasted into bug reports, so quiet is there
+    // for anyone who would rather it did not carry theirs.
+    //
+    // Everything this hands the page is watched through a get-only Proxy,
+    // which leaves keys, values and behaviour alone - a page enumerating the
+    // container object still sees exactly what it would have.
     const setting = ( ) => {
         try {
             const value = w.localStorage.getItem('gtm-rr-debug');
-            if ( value === null ) { return 'on'; }
+            if ( value === null ) { return 'verbose'; }
             const wanted = String(value).toLowerCase();
             if ( wanted === 'off' || wanted === '0' ) { return 'off'; }
-            if ( wanted === 'verbose' ) { return 'verbose'; }
-            return 'on';
+            if ( wanted === 'quiet' ) { return 'quiet'; }
+            return 'verbose';
         } catch(ex) {
         }
-        return 'on';
+        return 'verbose';
     };
 
     const level = setting();
