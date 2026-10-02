@@ -328,11 +328,15 @@ function consentRRGtmCore(options) {
     // Only where it is on, and only for what the page asks for by name.
     const watch = (object, where, known) => {
         if ( debug === false ) { return object; }
+        // A lookup rather than a scan: this runs on every property read a
+        // page makes on what it was handed.
+        const mine = Object.create(null);
+        for ( const name of known ) { mine[name] = true; }
         try {
             return new w.Proxy(object, {
                 get(target, property, receiver) {
                     if ( typeof property === 'string' ) {
-                        if ( known.indexOf(property) === -1 ) {
+                        if ( mine[property] === undefined ) {
                             report(where, property);
                         }
                     }
@@ -482,24 +486,44 @@ function consentRRGtmCore(options) {
     // Unconditionally ending it instead would un-hide a page that a second,
     // unblocked container is still loading for, which is theirs to do.
     let hiding = 'absent';
+    // Theirs re-runs this as it pumps messages, because its own state is
+    // changing underneath. Here nothing changes once it has ended the hiding,
+    // decided the hiding is another container's, or found none - so it stops
+    // looking rather than reading three properties on every push for the rest
+    // of the page's life. Only 'absent' is worth asking again: the snippet
+    // can run after this does.
+    let settled = false;
 
     const unhide = ( ) => {
+        if ( settled ) { return; }
         try {
             const queue = w[layer];
             if ( queue === null || typeof queue !== 'object' ) { return; }
             const hide = queue.hide;
-            if ( hide === null || typeof hide !== 'object' ) { return; }
+            if ( hide === null || typeof hide !== 'object' ) {
+                // None on the page. Their snippet's whole job is hiding the
+                // page while it loads, so one that is not there by the time
+                // the document is ready is not coming - and theirs would have
+                // timed itself out anyway. Stop asking.
+                if ( doc.readyState !== 'loading' ) { settled = true; }
+                return;
+            }
             if ( id === '' ) { return; }
             if ( hide[id] === undefined ) {
                 // Not listed, so not this container's to end.
                 hiding = 'theirs';
+                settled = true;
                 return;
             }
             if ( typeof hide.end !== 'function' ) { return; }
             hide[id] = false;
             for ( const key of Object.keys(hide) ) {
                 if ( hide[key] === true ) {
+                    // Another container is still expected, and this one has
+                    // said its piece by clearing its own entry: theirs is
+                    // what ends it now.
                     hiding = 'waiting';
+                    settled = true;
                     return;
                 }
             }
@@ -507,6 +531,7 @@ function consentRRGtmCore(options) {
             hide.end = null;
             end();
             hiding = 'ended';
+            settled = true;
         } catch(ex) {
         }
     };

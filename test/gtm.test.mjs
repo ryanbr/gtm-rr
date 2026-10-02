@@ -471,6 +471,43 @@ describe('googletagmanager_gtm', ( ) => {
         assert.ok(summary(out).includes(' hide=ended'), summary(out));
     });
 
+    it('ends a hiding whose snippet turns up after it does', async ( ) => {
+        // Their snippet is documented to go above the container tag, but a
+        // page can put it below - and this runs before either. So while the
+        // document is still being built, a hide that was not there yet is
+        // still looked for.
+        const dom = new JSDOM(fixture, { runScripts: 'outside-only', url: URL });
+        const w = dom.window;
+        assert.equal(w.document.readyState, 'loading');
+        w.console.info = ( ) => {};
+        snippet()(w);
+        w.eval(neutered);
+        // The snippet, after the resource.
+        w.eval('document.documentElement.className += " async-hide";' +
+            'window.dataLayer.hide = { "' + ID + '": true,' +
+            ' end: function(){ document.documentElement.className =' +
+            '  document.documentElement.className' +
+            '    .replace(/ ?async-hide/, ""); } };');
+        w.dataLayer.push({ event: 'anything' });
+        assert.equal(w.dataLayer.hide.end, null);
+        assert.equal(
+            w.document.documentElement.className.includes('async-hide'),
+            false
+        );
+    });
+
+    it('stops looking for a hiding once the page is built', async ( ) => {
+        const w = boot({ before: snippet() });
+        await settle(50);
+        assert.equal(w.document.readyState, 'complete');
+        // One that appears now has nothing to undo - theirs hides a page
+        // while it loads, and their own timer would have given up - so this
+        // is not still reading three properties on every push for it.
+        w.dataLayer.hide = { [ID]: true, end: ( ) => { w.ended = true; } };
+        w.dataLayer.push({ event: 'anything' });
+        assert.equal(w.ended, undefined);
+    });
+
     it('leaves the hiding to a container that is still expected', ( ) => {
         let out;
         const w = boot({

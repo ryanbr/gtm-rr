@@ -120,7 +120,11 @@ export default [
         file: CORE,
         from: `            for ( const key of Object.keys(hide) ) {
                 if ( hide[key] === true ) {
+                    // Another container is still expected, and this one has
+                    // said its piece by clearing its own entry: theirs is
+                    // what ends it now.
                     hiding = 'waiting';
+                    settled = true;
                     return;
                 }
             }`,
@@ -132,9 +136,33 @@ export default [
         from: `            if ( hide[id] === undefined ) {
                 // Not listed, so not this container's to end.
                 hiding = 'theirs';
+                settled = true;
                 return;
             }`,
         to: '',
+    },
+
+    {
+        // Equivalent, and declared so rather than chased again: without the
+        // early return the check runs on every push for the life of the page
+        // and reaches the same answer each time. Ended, hide.end is already
+        // null and it returns; another container's, and its entry is still
+        // undefined; waiting, and that container clears its own entry and
+        // ends the hiding itself, as the real one does and as a second copy
+        // of this resource does for its own id. The difference is CPU, which
+        // is why the return is there - see the benchmark in the commit that
+        // added it.
+        label: 'the hiding check never settles',
+        file: CORE,
+        from: '        if ( settled ) { return; }',
+        to: '',
+        equivalent: true,
+    },
+    {
+        label: 'the hiding check settles before the snippet can run',
+        file: CORE,
+        from: "                if ( doc.readyState !== 'loading' ) { settled = true; }",
+        to: '                settled = true;',
     },
 
     // What comes off the script's own src.
@@ -254,7 +282,7 @@ export default [
     {
         label: 'debug: known names reported too',
         file: CORE,
-        from: '                        if ( known.indexOf(property) === -1 ) {',
+        from: '                        if ( mine[property] === undefined ) {',
         to: '                        if ( true ) {',
     },
     {

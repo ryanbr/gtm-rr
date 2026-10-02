@@ -166,11 +166,13 @@ function consentRRGtmCore(options) {
     };
     const watch = (object, where, known) => {
         if ( debug === false ) { return object; }
+        const mine = Object.create(null);
+        for ( const name of known ) { mine[name] = true; }
         try {
             return new w.Proxy(object, {
                 get(target, property, receiver) {
                     if ( typeof property === 'string' ) {
-                        if ( known.indexOf(property) === -1 ) {
+                        if ( mine[property] === undefined ) {
                             report(where, property);
                         }
                     }
@@ -276,15 +278,21 @@ function consentRRGtmCore(options) {
         fire();
     };
     let hiding = 'absent';
+    let settled = false;
     const unhide = ( ) => {
+        if ( settled ) { return; }
         try {
             const queue = w[layer];
             if ( queue === null || typeof queue !== 'object' ) { return; }
             const hide = queue.hide;
-            if ( hide === null || typeof hide !== 'object' ) { return; }
+            if ( hide === null || typeof hide !== 'object' ) {
+                if ( doc.readyState !== 'loading' ) { settled = true; }
+                return;
+            }
             if ( id === '' ) { return; }
             if ( hide[id] === undefined ) {
                 hiding = 'theirs';
+                settled = true;
                 return;
             }
             if ( typeof hide.end !== 'function' ) { return; }
@@ -292,6 +300,7 @@ function consentRRGtmCore(options) {
             for ( const key of Object.keys(hide) ) {
                 if ( hide[key] === true ) {
                     hiding = 'waiting';
+                    settled = true;
                     return;
                 }
             }
@@ -299,6 +308,7 @@ function consentRRGtmCore(options) {
             hide.end = null;
             end();
             hiding = 'ended';
+            settled = true;
         } catch(ex) {
         }
     };
