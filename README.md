@@ -35,8 +35,8 @@ uBlock Origin fetches user resources from the URLs in its hidden setting
 `userResourcesLocation` (Settings > Advanced > click `advanced settings`):
 
 ```
-https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.1.1/dist/googletagmanager_gtm.js
-https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.1.1/dist/ga-optout.js
+https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.1.2/dist/googletagmanager_gtm.js
+https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.1.2/dist/ga-optout.js
 ```
 
 The setting takes several whitespace-separated URLs.
@@ -278,6 +278,58 @@ anything being wrapped at all: one storage read and no more.
 Otherwise the objects handed to the page are watched through a get-only
 `Proxy`, so their keys, their values and their behaviour are unchanged: a page
 enumerating the container object sees exactly what Google's own would give it.
+
+## What it cannot do
+
+**It cannot restore code that only exists inside a container.** The API stub
+answers `dataLayer`, `eventCallback`, the container object and the model; it
+has no idea which tags were configured, because that lives in the container
+this resource is standing in front of.
+
+The worked example is petzl.com's dealer locator, where the chain is
+**GTM → OneTrust → consent → GTM's Maps tag → `initGmaps` → map**, and *both*
+middle links are Custom HTML tags inside `GTM-MWKBJV`:
+
+```
+"function":"__html","priority":999,"metadata":["map"],
+"vtp_html":"<script src=\"https://cdn.cookielaw.org/scripttemplates/otSDKStub.js\"
+             data-domain-script=\"bb3af1ef-…\">"
+"vtp_html":"… a.src=\"https://maps.googleapis.com/maps/api/js?v=3.31
+             &key=AIzaSy…&callback=initGmaps\" …"
+```
+
+Neither the OneTrust tenant id nor the Maps key appears anywhere in the page,
+so no stub can produce them without shipping a copy of someone's container
+config - which would be stale the moment they edit it, and would mean *loading*
+OneTrust and Maps. On a site like that, letting `gtm.js` through is the only
+answer, and then the thing to replace is the consent manager rather than the
+container.
+
+Two commands identify such a site before you go hunting in a browser:
+
+```sh
+curl -s 'https://www.googletagmanager.com/gtm.js?id=<ID>' > c.js
+grep -o '"function":"__html"[^}]*' c.js | grep -o 'src=\\"[^\\]*' | sort -u
+```
+
+Anything with a `<script src=` in a `__html` tag is page functionality a stub
+cannot replace. Their own `"metadata"` field often names the purpose - both
+entries above are tagged `["map"]`.
+
+**Where you do let a container through, this resource stays out of its way.**
+Both wrap `dataLayer.push`, so a page's `eventCallback` used to be answered
+twice - once here on the next tick, once by their tags finishing - which on a
+submit callback is a double submit. The callback is now replaced with a
+once-guard, which is their own contract (`Go()` runs the list once and empties
+it), and where a real container has bound itself this does not answer at all:
+their `bind()` does `d.subscribers = (d.subscribers || 0) + 1`, so one more
+subscriber than this accounted for means something live is answering.
+
+One effect remains: on such a site the scriptlet installs the container object
+first, so their `lo()` get-or-keep adopts it and their internals read
+undefined. In the console that is a run of `missing=google_tag_manager.*` lines
+with `from=` at `googletagmanager.com/gtm.js`, which is the signature to
+recognise.
 
 ## Why an opt-out as well as a stub
 

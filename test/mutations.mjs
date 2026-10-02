@@ -25,12 +25,6 @@ export default [
         to: '',
     },
     {
-        label: 'eventCallback gets the wrong this',
-        file: CORE,
-        from: '                callback.apply(callback, []);',
-        to: '                callback.call(null);',
-    },
-    {
         label: 'push returns nothing',
         file: CORE,
         from: '            return push.apply(queue, items);',
@@ -61,6 +55,25 @@ export default [
                 return;
             }`,
         to: '',
+    },
+
+    {
+        label: 'a live container is answered over',
+        file: CORE,
+        from: '                        if ( live.subscribers > subscribed ) { return; }',
+        to: '',
+    },
+    {
+        label: 'no once-guard on the page callback',
+        file: CORE,
+        from: '                item.eventCallback = guard;',
+        to: '',
+    },
+    {
+        label: 'the guard passes its own this',
+        file: CORE,
+        from: '                    return callback.apply(callback, arguments);',
+        to: '                    return callback.apply(this, arguments);',
     },
 
     // The registry and the container object.

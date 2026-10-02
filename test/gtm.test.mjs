@@ -170,6 +170,54 @@ describe('googletagmanager_gtm', ( ) => {
         assert.deepEqual(calls, [ [ true, 0 ] ]);
     });
 
+    // A real container, in miniature: it wraps the same push, counts itself
+    // a subscriber the way their bind() does, and answers a callback when its
+    // own tags would have finished.
+    const realContainer = id => '(function(){var c=window.dataLayer,e=c.push;' +
+        'window.google_tag_manager=window.google_tag_manager||{};' +
+        "var d=window.google_tag_manager['dataLayer']=" +
+        "  window.google_tag_manager['dataLayer']||{};" +
+        'd.subscribers=(d.subscribers||0)+1;' +
+        'c.push=function(){var i=[].slice.call(arguments,0);' +
+        '  i.forEach(function(o){' +
+        "    if(o&&typeof o.eventCallback==='function'){" +
+        '      setTimeout(o.eventCallback,1) } });' +
+        '  return e.apply(c,i)};' +
+        'window.google_tag_manager["' + id + '"]=' +
+        '  window.google_tag_manager["' + id + '"]||{theirs:true}})();';
+
+    for ( const oursFirst of [ true, false ] ) {
+        const order = oursFirst ? 'before' : 'after';
+        it('answers a callback once with a real container ' + order + ' it',
+        async ( ) => {
+            // An allowlisted site - EasyPrivacy allowlists gtm.js on several
+            // hundred - runs the real container as well as this. Both wrap
+            // the push, so the page's callback was answered twice: on the
+            // next tick by this, and again when their tags finished. A form
+            // that submits on it submitted twice.
+            const dom = new JSDOM(fixture, {
+                runScripts: 'outside-only', url: URL,
+            });
+            const w = dom.window;
+            w.console.info = ( ) => {};
+            snippet()(w);
+            if ( oursFirst ) {
+                w.eval(neutered);
+                w.eval(realContainer(ID));
+            } else {
+                w.eval(realContainer(ID));
+                w.eval(neutered);
+            }
+            let fired = 0;
+            w.dataLayer.push({
+                event: 'formSubmit',
+                eventCallback: ( ) => { fired += 1; },
+            });
+            await settle(40);
+            assert.equal(fired, 1, 'fired ' + fired + ' times');
+        });
+    }
+
     it('runs it once, however long the eventTimeout', async ( ) => {
         const w = boot({ before: snippet() });
         let calls = 0;

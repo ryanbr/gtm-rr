@@ -525,18 +525,63 @@ function consentRRGtmCore(options) {
                 return;
             }
             if ( typeof callback !== 'function' ) { return; }
+            // Their own gate runs the callback once and once only - Go()
+            // sets a.D and empties the list - so a once-guard in its place
+            // is their contract, not an addition to it.
+            //
+            // It matters where a real container is running as well as this,
+            // which is what an allowlisted site gives you: it wraps the same
+            // push, this answers on the next tick and theirs answers when
+            // its tags finish, and the page's callback runs twice. A form
+            // that submits on it submits twice. Whoever gets there first now
+            // wins and the second call is a no-op, whether the other caller
+            // is a real container, a second container, or the page itself.
+            let guard = callback;
+            try {
+                let answered = false;
+                guard = function( ) {
+                    if ( answered ) { return undefined; }
+                    answered = true;
+                    // Theirs applies the page's callback with the callback
+                    // itself as this, so the guard hands that on rather than
+                    // passing its own.
+                    return callback.apply(callback, arguments);
+                };
+                item.eventCallback = guard;
+            } catch(ex) {
+                // A frozen object keeps its own callback; this still answers
+                // once from here.
+                guard = callback;
+            }
             const fire = ( ) => {
+                // A real container that bound itself to this data layer will
+                // answer the callback when its own tags finish, and it read
+                // the page's function before this guard existed if it wrapped
+                // the push on top. Their own bookkeeping says when that has
+                // happened: bind() does
+                //   d.subscribers = (d.subscribers || 0) + 1
+                // on the entry named after the layer. One more subscriber
+                // than this resource accounted for means something else is
+                // live and answering, and the quiet thing is to leave it to
+                // them - two answers to one callback is a form that submits
+                // twice.
                 try {
-                    // Theirs: k.apply(k, [].slice.call(arguments, 0)), and the
-                    // arguments it has at that point are none.
-                    callback.apply(callback, []);
+                    const live = registry[layer];
+                    if ( live !== null && typeof live === 'object' ) {
+                        if ( live.subscribers > subscribed ) { return; }
+                    }
+                } catch(ex) {
+                }
+                try {
+                    guard.apply(guard, []);
                 } catch(ex) {
                 }
             };
-            // eventTimeout is read only to keep it out of the model. Their timer
-            // exists because their tags take time and the callback must not be
-            // lost behind a slow one; nothing here takes any time, so the next
-            // tick is always sooner than any bound a page could ask for.
+            // eventTimeout is read only to keep it out of the model. Their
+            // timer exists because their tags take time and the callback must
+            // not be lost behind a slow one; nothing here takes any time, so
+            // the next tick is always sooner than any bound a page could ask
+            // for.
             try {
                 w.setTimeout(fire, 0);
                 return;
@@ -703,6 +748,15 @@ function consentRRGtmCore(options) {
         };
 
         const entry = already ? registry[layer] : state();
+        // What the count stood at once this resource had added itself, so a
+        // later bind by something else is visible.
+        let subscribed = 0;
+        try {
+            subscribed = entry !== null && typeof entry === 'object'
+                ? entry.subscribers
+                : 0;
+        } catch(ex) {
+        }
 
         // Their own entry carries more than these three - pruned, and whatever a
         // feature of theirs parks on it - so a read of something else is worth a
