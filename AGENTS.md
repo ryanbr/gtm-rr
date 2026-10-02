@@ -61,6 +61,13 @@ Carried over from consent-rr, where each cost a release:
   name come off the script's `src`, which a redirected script still carries.
   Nothing else is guessed: no `google_tag_data`, no `gtag`.
 
+  That `src` surviving the redirect is the assumption everything else rests on,
+  and it is **confirmed in the field**: on nzherald.co.nz (Firefox 157, uBO
+  serving this resource in place of its own) the line read
+  `loader=/gtm.js id=GTM-KGJ3NMV`, and neither value exists anywhere but that
+  attribute. uBO redirects at the network layer, so the element keeps what the
+  page wrote; the `data:` URI it actually fetches never appears in the DOM.
+
 ## Testing
 
 `npm test` builds, then runs the suite **against `dist/`**, parsed with uBO's
