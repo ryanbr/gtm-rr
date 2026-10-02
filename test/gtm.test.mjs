@@ -453,6 +453,49 @@ describe('googletagmanager_gtm', ( ) => {
         assert.equal(w.gaCalls, 1);
     });
 
+    it('keeps a data layer the page made itself, whatever it is', ( ) => {
+        // Their $c only creates what is not there and then wraps whatever
+        // push that object has, so a page with its own object keeps it - and
+        // keeps what it had put in it.
+        let out;
+        const w = boot({
+            before: w_ => {
+                out = lines(w_);
+                w_.eval('window.dataLayer = { mine: true, items: [],' +
+                    ' push: function(o){ this.items.push(o); return 7; } };');
+            },
+        });
+        assert.equal(w.dataLayer.mine, true);
+        assert.ok(out[0].includes(' push=hooked'), out[0]);
+        // Wrapped, not replaced: their own push still runs and its return
+        // value still comes back.
+        const calls = [];
+        const returned = w.dataLayer.push({
+            event: 'x',
+            eventCallback: ( ) => { calls.push(1); },
+        });
+        assert.equal(returned, 7);
+        assert.equal(w.dataLayer.items.length, 1);
+        assert.equal(w.google_tag_manager[ID].dataLayer.get('event'), 'x');
+    });
+
+    it('leaves a data layer with no push alone', ( ) => {
+        let out;
+        const w = boot({
+            before: w_ => {
+                out = lines(w_);
+                w_.eval('window.dataLayer = { mine: true };');
+            },
+        });
+        // Nothing to wrap, and inventing one would mean a page's own object
+        // growing a method it never had.
+        assert.equal(w.dataLayer.mine, true);
+        assert.equal(w.dataLayer.push, undefined);
+        assert.ok(out[0].includes(' push=nopush'), out[0]);
+        // The container still goes up, which is the other half of the job.
+        assert.ok(w.google_tag_manager[ID]);
+    });
+
     it('does nothing the second time it is injected', async ( ) => {
         const w = boot({ before: snippet() });
         await settle(60);

@@ -341,18 +341,24 @@ function consentRRGtmCore(options) {
         }
     };
 
+    // Their get-or-create, which only ever creates what is not there:
+    //   function $c(a,b){ var c=A, d=c[a]; c[a] = d===void 0 ? b : d;
+    //                     return c[a] }
+    // and then wraps whatever push that object has. Replacing anything that
+    // is not an array would throw away a data layer the page made itself,
+    // along with whatever the page had put in it.
     const hook = ( ) => {
         let queue = null;
         try {
-            if ( Array.isArray(w[layer]) === false ) { w[layer] = []; }
+            if ( w[layer] === undefined ) { w[layer] = []; }
             queue = w[layer];
         } catch(ex) {
             return 'refused';
         }
-        if ( Array.isArray(queue) === false ) { return 'refused'; }
+        if ( queue === null || typeof queue !== 'object' ) { return 'refused'; }
         if ( queue.consentRRGtm === VERSION ) { return 'already'; }
         const push = queue.push;
-        if ( typeof push !== 'function' ) { return 'refused'; }
+        if ( typeof push !== 'function' ) { return 'nopush'; }
         const wrapped = function( ) {
             const items = [].slice.call(arguments, 0);
             for ( const item of items ) { handle(item); }
@@ -368,8 +374,13 @@ function consentRRGtmCore(options) {
         } catch(ex) {
             return 'refused';
         }
+        // Whatever the snippet pushed before this arrived is in there
+        // already, and theirs reads it on arrival. Only an array can be read
+        // back that way.
         try {
-            for ( const item of queue.slice(0) ) { handle(item); }
+            if ( Array.isArray(queue) ) {
+                for ( const item of queue.slice(0) ) { handle(item); }
+            }
         } catch(ex) {
         }
         return 'hooked';

@@ -194,15 +194,15 @@ function consentRRGtmCore(options) {
     const hook = ( ) => {
         let queue = null;
         try {
-            if ( Array.isArray(w[layer]) === false ) { w[layer] = []; }
+            if ( w[layer] === undefined ) { w[layer] = []; }
             queue = w[layer];
         } catch(ex) {
             return 'refused';
         }
-        if ( Array.isArray(queue) === false ) { return 'refused'; }
+        if ( queue === null || typeof queue !== 'object' ) { return 'refused'; }
         if ( queue.consentRRGtm === VERSION ) { return 'already'; }
         const push = queue.push;
-        if ( typeof push !== 'function' ) { return 'refused'; }
+        if ( typeof push !== 'function' ) { return 'nopush'; }
         const wrapped = function( ) {
             const items = [].slice.call(arguments, 0);
             for ( const item of items ) { handle(item); }
@@ -218,7 +218,9 @@ function consentRRGtmCore(options) {
             return 'refused';
         }
         try {
-            for ( const item of queue.slice(0) ) { handle(item); }
+            if ( Array.isArray(queue) ) {
+                for ( const item of queue.slice(0) ) { handle(item); }
+            }
         } catch(ex) {
         }
         return 'hooked';
