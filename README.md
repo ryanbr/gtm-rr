@@ -4,10 +4,11 @@ Google Tag Manager resource replacements for uBlock Origin.
 
 Two resources:
 
-- **`gtm-neutered.js`** stands in for `googletagmanager.com/gtm.js`. The
-  container loads nothing, fires no tag and asks for nothing - and the page
-  keeps the API its own code was written against, which is the part a plain
-  block takes away.
+- **`googletagmanager_gtm.js`** stands in for both of Google's loaders -
+  `gtm.js` and `gtag/js` - and ships under uBlock Origin's own resource name,
+  which it replaces. Nothing is fetched, no tag fires, and the page keeps the
+  API its own code was written against, which is the part a plain block takes
+  away.
 - **`ga-optout.js`** replaces nothing. It turns on the opt-out switches
   Google's own code reads before it sends, for the bundles a redirect cannot
   reach: a loader on the site's own domain, behind a proxied path, or inlined
@@ -34,24 +35,51 @@ uBlock Origin fetches user resources from the URLs in its hidden setting
 `userResourcesLocation` (Settings > Advanced > click `advanced settings`):
 
 ```
-https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.0.0/dist/gtm-neutered.js
+https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.0.0/dist/googletagmanager_gtm.js
 https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.0.0/dist/ga-optout.js
 ```
 
 or
 
 ```
-https://cdn.jsdelivr.net/npm/gtm-rr@1.0.0/dist/gtm-neutered.js
+https://cdn.jsdelivr.net/npm/gtm-rr@1.0.0/dist/googletagmanager_gtm.js
 https://cdn.jsdelivr.net/npm/gtm-rr@1.0.0/dist/ga-optout.js
 ```
 
 The setting takes several whitespace-separated URLs.
 
-Then add the filters from [`filters/gtm.txt`](filters/gtm.txt) and
-[`filters/ga.txt`](filters/ga.txt), or the lists themselves as custom filter
-lists. The filters do nothing until the resource is
-installed: uBO has no such resource by its own name, and a `redirect=` to a
-name it does not know silently does nothing.
+**For the first one that is the whole install.** uBO's default lists already
+send both loaders to `googletagmanager_gtm.js`:
+
+```
+||googletagmanager.com/gtag/js$script,xhr,redirect=googletagmanager_gtm.js:5
+||googletagmanager.com/gtm.js$script,redirect=googletagmanager_gtm.js:5,domain=~nerc.com
+```
+
+and a user resource replaces a built-in of the same name - uBO awaits its own
+`loadBuiltinResources`, then parses the `userResourcesLocation` text into the
+same map. So no filter of yours is needed on the sites those rules cover.
+
+[`filters/gtm.txt`](filters/gtm.txt) carries only what uBO's rules cannot
+reach, which is server-side tagging on a site's own domain.
+[`filters/ga.txt`](filters/ga.txt) is where `ga-optout` is used from, since
+that one is a scriptlet and has to be asked for per site.
+
+## What replacing uBO's resource takes on
+
+Theirs is 1.5KB and does three things: a `ga` noop, `dataLayer.hide.end()`,
+and an `eventCallback` on push. Standing in front of it means keeping all
+three - and then answering the parts it has none for.
+
+| | uBO's | this |
+|---|---|---|
+| `eventCallback` | called | called, and the page's array is kept, with `push` returning what the array's own `push` returned |
+| `dataLayer.hide.end()` | ended unconditionally | ended the way their container does: own entry cleared, ended only when no other container is still expected |
+| `window.ga` | noop | noop, and a better stub left alone |
+| `window.google_tag_manager` | - | the container object their `RU()` builds, with the model and `bootstrap` |
+| `gtm.dom` / `gtm.load` | - | pushed, once each, as theirs does |
+| `gtag("get", …, callback)` | - | answered, with `undefined` |
+| no data layer yet | returns early, does nothing | creates it, as their loader does |
 
 ## Why an opt-out as well as a stub
 
