@@ -172,5 +172,12 @@ it refuses to run if one names a version other than `package.json`'s. So a
 release is three things in one commit - the version, the resource versions that
 changed, and those URLs - and the tag goes on that commit.
 
+**Push the tag with the commit, not later.** v1.1.2 and v1.1.4 were pinned in
+the README and never tagged, so every install URL the README gave for two
+releases returned 404 - and uBO skips a user resource URL that fails without a
+word, so the resource was simply missing with nothing to see anywhere. CI now
+checks each pinned URL resolves (via the API, since the raw host caches a 404
+for minutes), which means a bump pushed without its tag fails the build.
+
 Nothing is published to npm. A `cdn.jsdelivr.net/npm/...` URL would need that,
 so none is offered.

@@ -49,3 +49,37 @@ jobs:
       # Every test here is meant to fail against broken code. This proves it,
       # by breaking the code on purpose - see tools/mutate.mjs.
       - run: npm run mutate
+      # The build already checks that a pinned install URL names the version
+      # being built. This checks the other half: that the version exists as a
+      # tag, so the URL actually resolves. v1.1.2 and v1.1.4 were pinned in the
+      # README and never tagged, and uBO skips a URL that 404s without a word,
+      # so the resource was simply absent. Asked of the API rather than the raw
+      # host, which caches a 404 for minutes after the tag lands.
+      - name: pinned install URLs resolve
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          fail=0
+          for u in $(grep -ohE 'gtm-rr/v[0-9]+\.[0-9]+\.[0-9]+/dist/[A-Za-z0-9_.-]+' \
+              README.md AGENTS.md CLAUDE.md | sort -u); do
+            ref=${u#gtm-rr/}; ref=${ref%%/*}
+            path=dist/${u##*/}
+            for attempt in 1 2 3 4 5 6; do
+              if gh api "repos/${{ github.repository }}/contents/$path?ref=$ref" \
+                  --jq .sha >/dev/null 2>&1; then
+                echo "ok   $ref $path"
+                break
+              fi
+              if [ "$attempt" = 6 ]; then
+                echo "::error::$path does not exist at $ref - the docs tell"\
+                  "people to install a version that was never tagged, and uBO"\
+                  "skips a URL that 404s in silence"
+                fail=1
+                break
+              fi
+              sleep 20
+            done
+          done
+          exit $fail
