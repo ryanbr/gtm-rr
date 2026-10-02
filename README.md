@@ -58,7 +58,11 @@ lists neither `data:` nor `'unsafe-inline'`:
 | yes | yes | whichever lands first does the work; the other sees the container id already registered and no-ops, saying `push=already container=kept` |
 
 On a site where the redirect does land, the scriptlet costs one storage read and
-a `MutationObserver` that finds nothing - it does not install twice.
+a `MutationObserver` that finds its work already done. Verified both ways round
+- either delivery can get there first - and nothing is doubled: one container
+object, one wrapped `push`, one subscriber, `gtm.dom` and `gtm.load` once each,
+one watched registry, and an `eventCallback` answered once. The only visible
+difference is the second console line.
 
 uBO's default lists already send both loaders to `googletagmanager_gtm.js`:
 

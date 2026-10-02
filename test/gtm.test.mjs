@@ -951,6 +951,86 @@ describe('googletagmanager_gtm', ( ) => {
         assert.ok(w.google_tag_manager[ID]);
     });
 
+    // The recommended install is the redirect and the global scriptlet
+    // together, since whether a site's CSP will accept the redirect cannot be
+    // known from a list. On a site where both land, either can get there
+    // first.
+    const bothWays = async redirectFirst => {
+        const dom = new JSDOM(
+            '<!doctype html><html><head></head><body></body></html>',
+            { runScripts: 'outside-only', url: URL }
+        );
+        const w = dom.window;
+        const out = lines(w);
+        snippet()(w);
+        // The scriptlet, at document_start, before the page's tag exists.
+        w.eval(neutered);
+        assert.deepEqual(out, [], 'a scriptlet with no loader says nothing');
+        w.document.head.insertAdjacentHTML('beforeend',
+            '<script src="https://www.googletagmanager.com/gtm.js' +
+            '?id=GTM-BOTH0001"></scr' + 'ipt>');
+        const tag = w.document.querySelector('script[src*=googletagmanager]');
+        const asRedirect = ( ) => {
+            // uBO serves the resource as the script itself, so
+            // document.currentScript is the page's own tag.
+            Object.defineProperty(w.document, 'currentScript', {
+                value: tag, configurable: true,
+            });
+            w.eval(neutered);
+            delete w.document.currentScript;
+        };
+        if ( redirectFirst ) {
+            asRedirect();
+            await settle(60);
+        } else {
+            // Let the scriptlet's watch see the tag first.
+            await settle(60);
+            asRedirect();
+        }
+        await settle(20);
+        return { w, out };
+    };
+
+    for ( const redirectFirst of [ true, false ] ) {
+        const order = redirectFirst ? 'the redirect' : 'the scriptlet';
+        it('installs once with both active, ' + order + ' first',
+        async ( ) => {
+            const { w, out } = await bothWays(redirectFirst);
+            const ID2 = 'GTM-BOTH0001';
+            const g = w.google_tag_manager;
+            // One did the work and the other found it done.
+            assert.equal(out.length, 2, out.join(' | '));
+            assert.ok(out.some(l => l.includes(' push=hooked container=installed')),
+                out.join(' | '));
+            assert.ok(out.some(l => l.includes(' push=already container=kept')),
+                out.join(' | '));
+            // And nothing is doubled: theirs counts one subscriber per
+            // instance, the push is wrapped once, their two events go out
+            // once each, and the registry is wrapped once.
+            assert.equal(g.dataLayer.subscribers, 1);
+            assert.equal(w.dataLayer.consentRRGtm, versions.gtm);
+            assert.deepEqual(
+                Array.from(w.dataLayer)
+                    .filter(i => i && typeof i.event === 'string')
+                    .map(i => String(i.event)),
+                [ 'gtm.js', 'gtm.dom', 'gtm.load' ]
+            );
+            assert.equal(
+                Object.keys(g).filter(k => k.startsWith('GTM-')).length, 1
+            );
+            assert.equal(g.consentRRGtmWatched, versions.gtm);
+            // The contract a page waits on still answers exactly once.
+            const calls = [];
+            w.dataLayer.push({
+                event: 'submit',
+                eventCallback: ( ) => { calls.push(1); },
+            });
+            await settle(10);
+            assert.deepEqual(calls, [ 1 ]);
+            assert.ok(g[ID2]);
+        });
+    }
+
     it('does nothing the second time it is injected', async ( ) => {
         const w = boot({ before: snippet() });
         await settle(60);
