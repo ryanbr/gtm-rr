@@ -35,8 +35,8 @@ uBlock Origin fetches user resources from the URLs in its hidden setting
 `userResourcesLocation` (Settings > Advanced > click `advanced settings`):
 
 ```
-https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.0.0/dist/googletagmanager_gtm.js
-https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.0.0/dist/ga-optout.js
+https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.1.0/dist/googletagmanager_gtm.js
+https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.1.0/dist/ga-optout.js
 ```
 
 The setting takes several whitespace-separated URLs.
@@ -117,6 +117,47 @@ Deliberately, and each one documented in the source with the reason:
 Anything in the first table that misbehaves is a bug here. Anything in the
 second is a decision - and if a site needs one of them, the reporting below
 will name it.
+
+## When a site's CSP refuses it
+
+```
+<script> source URI is not allowed in this document:
+  "https://www.googletagmanager.com/gtag/js?id=G-JJTLVXMBWX&cx=c&gtm=4e69u2h1"
+```
+
+That is the one real limit of a *user* resource. uBO has no web-accessible URL
+for one, so it serves it as `data:text/javascript;base64,...` - and a page
+whose `Content-Security-Policy` does not allow `data:` in `script-src` refuses
+it. Nothing of this runs there, and the console says nothing because nothing
+ran.
+
+**On such a site, replacing uBO's resource is a step backwards**, and that is
+worth being blunt about: uBO's own copy is served from an extension URL, which
+a page's CSP does not get to refuse, so theirs would have run where this
+cannot. The request is still blocked - no tag loads either way - but the page
+gets no stub at all.
+
+The way round it is the scriptlet form, which is injected rather than fetched,
+so there is no URI for a CSP to object to - and `filters/gtm.txt` carries it
+globally, since a CSP is not something a list can enumerate:
+
+```
+*##+js(googletagmanager_gtm)
+```
+
+That is safe to apply everywhere because the resource does nothing until there
+is something to stand in for. Injected at `document_start` the page has not
+parsed its own tag yet, so it watches for one and starts when it appears; a
+page that never loads a container comes away with no data layer, no registry,
+no `ga()` and nothing in the console. Where the redirect already worked, the
+scriptlet is a no-op - the container id is registered, and that is what makes a
+second run do nothing.
+
+The id is still found on a CSP-blocked page: the script element is in the
+document even though its fetch was refused, and with no
+`document.currentScript` to read, the resource scans the page's own tags for
+it. On the example above that gives `id=G-JJTLVXMBWX`, the container object,
+and an answered `gtag('get', …)`.
 
 ## When a page half-works
 

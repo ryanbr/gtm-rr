@@ -57,9 +57,9 @@ export default [
     {
         label: 'a command is merged into the model',
         file: CORE,
-        from: `        if ( Object.prototype.toString.call(item) === '[object Arguments]' ) {
-            return;
-        }`,
+        from: `            if ( Object.prototype.toString.call(item) === '[object Arguments]' ) {
+                return;
+            }`,
         to: '',
     },
 
@@ -73,18 +73,18 @@ export default [
     {
         label: 'an existing container is overwritten',
         file: CORE,
-        from: `        if ( registry[id] !== undefined && registry[id] !== null ) {
-            return 'kept';
-        }`,
+        from: `            if ( registry[id] !== undefined && registry[id] !== null ) {
+                return 'kept';
+            }`,
         to: '',
     },
     {
         label: 'the marker is enumerable',
         file: CORE,
-        from: `            Object.defineProperty(object, 'consentRRGtm', {
-                value: VERSION,
-                enumerable: false,
-            });`,
+        from: `                Object.defineProperty(object, 'consentRRGtm', {
+                    value: VERSION,
+                    enumerable: false,
+                });`,
         to: "            object.consentRRGtm = VERSION;",
     },
     {
@@ -118,27 +118,27 @@ export default [
     {
         label: 'the hiding is ended over another container',
         file: CORE,
-        from: `            for ( const key of Object.keys(hide) ) {
-                if ( hide[key] === true ) {
-                    // Another container is still expected, and this one has
-                    // said its piece by clearing its own entry: theirs is
-                    // what ends it now.
-                    hiding = 'waiting';
-                    settled = true;
-                    return;
-                }
-            }`,
+        from: `                for ( const key of Object.keys(hide) ) {
+                    if ( hide[key] === true ) {
+                        // Another container is still expected, and this one has
+                        // said its piece by clearing its own entry: theirs is
+                        // what ends it now.
+                        hiding = 'waiting';
+                        settled = true;
+                        return;
+                    }
+                }`,
         to: '',
     },
     {
         label: 'a hiding that is not ours is ended',
         file: CORE,
-        from: `            if ( hide[id] === undefined ) {
-                // Not listed, so not this container's to end.
-                hiding = 'theirs';
-                settled = true;
-                return;
-            }`,
+        from: `                if ( hide[id] === undefined ) {
+                    // Not listed, so not this container's to end.
+                    hiding = 'theirs';
+                    settled = true;
+                    return;
+                }`,
         to: '',
     },
 
@@ -209,12 +209,12 @@ export default [
     {
         label: 'the ga noop uBO put up is dropped',
         file: GTM,
-        from: `        if ( typeof w.ga !== 'function' ) {
-            w.ga = function( ) {
-                if ( gaCalls === null ) { return; }
-                gaCalls(arguments);
-            };
-        }`,
+        from: `            if ( typeof w.ga !== 'function' ) {
+                w.ga = function( ) {
+                    if ( gaCalls === null ) { return; }
+                    gaCalls(arguments);
+                };
+            }`,
         to: '',
     },
     {
@@ -264,7 +264,7 @@ export default [
     {
         label: 'debug: page data echoed by default',
         file: CORE,
-        from: "                (verbose && value !== undefined\n                    ? ' args=' + snippet(value)\n                    : '') +",
+        from: "                    (verbose && value !== undefined\n                        ? ' args=' + snippet(value)\n                        : '') +",
         to: "                (value !== undefined ? ' args=' + snippet(value) : '') +",
     },
     {
@@ -282,16 +282,16 @@ export default [
     {
         label: 'debug: known names reported too',
         file: CORE,
-        from: `                    if ( mine[property] !== undefined ) {
-                        return Reflect.get(target, property, receiver);
-                    }`,
+        from: `                        if ( mine[property] !== undefined ) {
+                            return Reflect.get(target, property, receiver);
+                        }`,
         to: '',
     },
     {
         label: 'debug: a name is reported every time',
         file: CORE,
-        from: `        if ( Object.prototype.hasOwnProperty.call(named, key) ) { return; }
-        named[key] = true;`,
+        from: `            if ( Object.prototype.hasOwnProperty.call(named, key) ) { return; }
+            named[key] = true;`,
         to: '',
     },
     {
@@ -303,9 +303,9 @@ export default [
     {
         label: 'debug: the proxy changes what a page reads',
         file: CORE,
-        from: `                    if ( probing === false ) {
-                        return Reflect.get(target, property, receiver);
-                    }`,
+        from: `                        if ( probing === false ) {
+                            return Reflect.get(target, property, receiver);
+                        }`,
         to: `                    if ( probing === false ) {
                         return undefined;
                     }`,
@@ -313,9 +313,9 @@ export default [
     {
         label: 'debug: ga calls are not named',
         file: GTM,
-        from: `                report.report(
-                    'ga', String(args[0]), [].slice.call(args, 1)
-                );`,
+        from: `                    report.report(
+                        'ga', String(args[0]), [].slice.call(args, 1)
+                    );`,
         to: '',
     },
 
@@ -328,22 +328,22 @@ export default [
     {
         label: 'debug: a value is invented for a missing property',
         file: CORE,
-        from: "                (verbose && value !== undefined\n                    ? ' args=' + snippet(value)\n                    : '') +",
+        from: "                    (verbose && value !== undefined\n                        ? ' args=' + snippet(value)\n                        : '') +",
         to: "                ' args=' + snippet(value) +",
     },
     {
         label: 'debug: what is echoed is unbounded',
         file: CORE,
-        from: "            if ( text.length <= CAP ) { return text; }\n            return text.slice(0, CAP) + '...';",
+        from: "                if ( text.length <= CAP ) { return text; }\n                return text.slice(0, CAP) + '...';",
         to: '            return text;',
     },
     {
         label: 'debug: the caller is not named',
         file: CORE,
-        from: `                (verbose && value !== undefined
-                    ? ' args=' + snippet(value)
-                    : '') +
-                ' from=' + caller()`,
+        from: `                    (verbose && value !== undefined
+                        ? ' args=' + snippet(value)
+                        : '') +
+                    ' from=' + caller()`,
         to: `                (verbose && value !== undefined
                     ? ' args=' + snippet(value)
                     : '') +
@@ -359,20 +359,20 @@ export default [
     {
         label: 'debug: the layer entry is not watched',
         file: CORE,
-        from: `            registry[layer] = watch(entry, 'layer', [
-                'subscribers', 'gtmDom', 'gtmLoad',
-            ]);`,
+        from: `                registry[layer] = watch(entry, 'layer', [
+                    'subscribers', 'gtmDom', 'gtmLoad',
+                ]);`,
         to: '            registry[layer] = entry;',
     },
     {
         label: 'debug: a later key is reported as missing',
         file: CORE,
-        from: `                set(target, property, value, receiver) {
-                    if ( typeof property === 'string' ) {
-                        known[property] = true;
-                    }
-                    return Reflect.set(target, property, value, receiver);
-                },`,
+        from: `                    set(target, property, value, receiver) {
+                        if ( typeof property === 'string' ) {
+                            known[property] = true;
+                        }
+                        return Reflect.set(target, property, value, receiver);
+                    },`,
         to: `                set(target, property, value, receiver) {
                     return Reflect.set(target, property, value, receiver);
                 },`,
@@ -399,7 +399,7 @@ export default [
     {
         label: 'probe: structural names answered too',
         file: CORE,
-        from: '                    if ( structural[property] !== undefined ) {\n                        return Reflect.get(target, property, receiver);\n                    }',
+        from: '                        if ( structural[property] !== undefined ) {\n                            return Reflect.get(target, property, receiver);\n                        }',
         to: '',
     },
     {
@@ -411,7 +411,7 @@ export default [
     {
         label: 'probe: a real value is replaced by a function',
         file: CORE,
-        from: '                    const held = Reflect.get(target, property, receiver);\n                    if ( held !== undefined ) { return held; }',
+        from: '                        const held = Reflect.get(target, property, receiver);\n                        if ( held !== undefined ) { return held; }',
         to: '',
     },
     {
@@ -419,6 +419,35 @@ export default [
         file: CORE,
         from: "                        ' called=' + where + '.' + property +",
         to: "                        ' called=' +",
+    },
+
+    {
+        label: 'starts on a page with no loader at all',
+        file: CORE,
+        from: "    if ( first.id !== '' ) { return start(first); }",
+        to: '    return start(first);',
+    },
+    {
+        label: 'never starts when the tag turns up later',
+        file: CORE,
+        from: '    waiting();',
+        to: '',
+    },
+    {
+        label: 'the watch for a tag never stops',
+        file: CORE,
+        from: '                w.setTimeout(( ) => {\n                    if ( done ) { return; }\n                    done = true;',
+        to: '                w.setTimeout(( ) => {\n                    if ( true ) { return; }\n                    done = true;',
+        // Equivalent: the timer only stops a watch that has not fired, and a
+        // watch that never stops reaches the same answers - it just keeps a
+        // disconnected-from-nothing observer alive for the life of the page.
+        equivalent: true,
+    },
+    {
+        label: 'the ga noop goes up with no loader to stand in for',
+        file: GTM,
+        from: "        try {\n            if ( typeof w.ga !== 'function' ) {",
+        to: '        try {\n            if ( true ) {',
     },
 
     // The opt-out, which is a different job in the same repo.

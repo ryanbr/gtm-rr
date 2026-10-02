@@ -19,6 +19,18 @@ serves a user resource as `data:text/javascript;base64,...` built with `btoa()`,
 and rejects template literals, because the line-based stripping would change a
 string that spanned lines.
 
+**That `data:` URI has a consequence worth knowing before promising anything:**
+a page whose CSP does not allow `data:` in `script-src` refuses it, so no user
+resource runs there at all - seen on trademe.co.nz as
+`<script> source URI is not allowed in this document`. uBO's own built-in
+resources come from an extension URL and a page's CSP cannot refuse those, so
+shadowing one of theirs with a user resource is a downgrade on those sites: the
+request is still blocked, but the page gets no stub where theirs would have
+run. The scriptlet form (`##+js(name)`) is injected rather than fetched and has
+no URI to object to, which is the per-site way round it - and the reason the
+resource has a fallback that scans the page's own script tags for the container
+id instead of reading `document.currentScript`.
+
 `+js(gtm-neutered)` takes no `.js`; `redirect=gtm-neutered.js` takes the full
 name. A wrong token injects nothing and says nothing.
 

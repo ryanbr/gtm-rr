@@ -91,18 +91,7 @@ function consentRRGtm() {
     const NAME = 'googletagmanager_gtm';
     const VERSION = '@@VERSION@@';
 
-    // uBO's own resource does this, so standing in front of it has to.
-    const noopfn = ( ) => undefined;
     let gaCalls = null;
-    try {
-        if ( typeof w.ga !== 'function' ) {
-            w.ga = function( ) {
-                if ( gaCalls === null ) { return; }
-                gaCalls(arguments);
-            };
-        }
-    } catch(ex) {
-    }
 
     let answered = 0;
 
@@ -143,8 +132,53 @@ function consentRRGtm() {
         return true;
     };
 
+    // Said when it starts, which is either now or when a loader tag turns up
+    // - injected as a scriptlet, there is nothing to stand in for yet.
+    const announce = report => {
+        // uBO's own resource noops ga, so standing in front of it has to -
+        // but only once there is a loader to stand in for. Injected as a
+        // scriptlet this runs on every page the rule covers, and a page with
+        // no container has no business growing a ga() either.
+        try {
+            if ( typeof w.ga !== 'function' ) {
+                w.ga = function( ) {
+                    if ( gaCalls === null ) { return; }
+                    gaCalls(arguments);
+                };
+            }
+        } catch(ex) {
+        }
+        // Their own resource noops ga and says nothing. With the reporting on,
+        // what a page called it with is worth having: it means analytics.js
+        // was blocked without a stub of its own.
+        if ( report.debug ) {
+            gaCalls = args => {
+                try {
+                    report.report(
+                        'ga', String(args[0]), [].slice.call(args, 1)
+                    );
+                } catch(ex) {
+                }
+            };
+        }
+        try {
+            w.console.info(
+                '[gtm-rr] ' + NAME + ' ' + VERSION +
+                ' loader=' + (report.path !== '' ? report.path : 'unknown') +
+                ' id=' + (report.id !== '' ? report.id : 'unknown') +
+                ' layer=' + report.layer +
+                ' push=' + report.hooked +
+                ' container=' + report.installed +
+                ' hide=' + report.hiding() +
+                ' debug=' + report.level
+            );
+        } catch(ex) {
+        }
+    };
+
     const core = consentRRGtmCore({
         name: NAME,
+        started: announce,
         paths: [ '/gtm.js', '/gtag/js' ],
         // The container's two fields go on only where this is standing in for
         // the container.
@@ -157,33 +191,5 @@ function consentRRGtm() {
         },
         command,
     });
-    if ( core === null ) { return; }
-    const report = core;
-    // Their own resource noops ga and says nothing. With debugging on, what a
-    // page called it with is worth having: it means analytics.js was blocked
-    // without a stub of its own.
-    if ( report.debug ) {
-        gaCalls = args => {
-            try {
-                report.report(
-                    'ga', String(args[0]), [].slice.call(args, 1)
-                );
-            } catch(ex) {
-            }
-        };
-    }
-
-    try {
-        w.console.info(
-            '[gtm-rr] ' + NAME + ' ' + VERSION +
-            ' loader=' + (report.path !== '' ? report.path : 'unknown') +
-            ' id=' + (report.id !== '' ? report.id : 'unknown') +
-            ' layer=' + report.layer +
-            ' push=' + report.hooked +
-            ' container=' + report.installed +
-            ' hide=' + report.hiding() +
-            ' debug=' + report.level
-        );
-    } catch(ex) {
-    }
+    if ( core !== null ) { announce(core); }
 }

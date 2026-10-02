@@ -35,6 +35,27 @@
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+! Where a site's CSP will not have a data: script, the redirect cannot run:
+! uBO has no web-accessible URL for a user resource, so it serves one as
+! data:text/javascript;base64,... and the page refuses it -
+!
+!   <script> source URI is not allowed in this document:
+!     "https://www.googletagmanager.com/gtag/js?id=G-...&cx=c&gtm=..."
+!
+! The scriptlet form is injected rather than fetched, so there is no URI to
+! object to. The container id still comes off the page's own script tag, which
+! is in the document even though its fetch was refused.
+!
+! It is global rather than per site, because a CSP is not something a list can
+! enumerate. Injected at document_start the page has not parsed its own tag
+! yet, so the resource does nothing and watches for one: a page that never
+! loads a container never gets a data layer, a registry, a ga() or a word in
+! the console out of it, and a page where the redirect already ran is a no-op
+! because the container id is already registered.
+! -----------------------------------------------------------------------------
+*##+js(googletagmanager_gtm)
+
+! -----------------------------------------------------------------------------
 ! Where a redirect cannot land at all - an inlined bundle, or a path a rule
 ! cannot match - the resource has nothing to stand in front of, and the
 ! scriptlet form would be answering for a loader that is still running. Use

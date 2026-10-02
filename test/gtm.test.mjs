@@ -946,18 +946,75 @@ describe('googletagmanager_gtm', ( ) => {
         assert.equal(w.google_tag_manager.dataLayer.subscribers, 1);
     });
 
-    it('works with no tag to read, as a scriptlet has none', ( ) => {
+    it('finds the id off a tag whose own fetch was refused', ( ) => {
+        // A site whose CSP will not have a data: script refuses the redirect,
+        // and the way round it is the scriptlet form - injected, so no URI to
+        // object to, and no document.currentScript either. The element is
+        // still in the document, which is where the id comes from.
+        let out;
+        const html = '<!doctype html><html><head><script async src=' +
+            '"https://www.googletagmanager.com/gtag/js?id=G-JJTLVXMBWX' +
+            '&cx=c&gtm=4e69u2h1"></scr' + 'ipt>' +
+            '</head><body><p id="content">x</p></body></html>';
+        const w = boot({
+            html,
+            before: w_ => {
+                out = lines(w_);
+                w_.eval('window.dataLayer = window.dataLayer || [];' +
+                    'window.gtag = function gtag(){' +
+                    ' window.dataLayer.push(arguments); };' +
+                    'window.gtag("config", "G-JJTLVXMBWX");');
+            },
+        });
+        // Their extra query parameters do not get in the way of the id.
+        assert.ok(summary(out).includes(' id=G-JJTLVXMBWX'), summary(out));
+        assert.ok(summary(out).includes(' loader=/gtag/js'), summary(out));
+        assert.deepEqual(
+            Object.keys(w.google_tag_manager['G-JJTLVXMBWX']).sort(),
+            [ 'bootstrap', 'callback', 'dataLayer' ]
+        );
+    });
+
+    it('does nothing at all on a page with no loader to stand in for', ( ) => {
+        // Injected as a scriptlet - which a site whose CSP refuses a data:
+        // URI needs - this runs on every page the rule covers. A page that
+        // never loads a container must not come away with a dataLayer, a
+        // registry, or a word in the console.
         let out;
         const html = '<!doctype html><html><head></head><body>' +
             '<p id="content">x</p></body></html>';
-        const w = boot({ html, before: w_ => { out = lines(w_); snippet()(w_); } });
-        // No id to be had, so no container is registered under one - but the
-        // push contract, which is what a page waits on, still works.
-        assert.ok(summary(out).includes(' id=unknown'), summary(out));
-        assert.ok(summary(out).includes(' container=noid'), summary(out));
-        assert.equal(typeof w.dataLayer.push, 'function');
+        const w = boot({ html, before: w_ => { out = lines(w_); } });
+        assert.deepEqual(out, []);
+        assert.equal(w.google_tag_manager, undefined);
+        assert.equal(w.dataLayer, undefined);
+        assert.equal(w.ga, undefined);
     });
 
+    it('starts when a loader tag turns up after it does', async ( ) => {
+        // The scriptlet case: at document_start the page has not parsed its
+        // own tag yet, so there is nothing to read and nothing to do - until
+        // there is.
+        let out;
+        const dom = runDom(
+            neutered, URL,
+            '<!doctype html><html><head></head><body></body></html>',
+            w_ => { out = lines(w_); }
+        );
+        const w = dom.window;
+        assert.deepEqual(out, []);
+        w.document.head.insertAdjacentHTML('beforeend',
+            '<script async src="https://www.googletagmanager.com/gtm.js' +
+            '?id=GTM-LATER001"></scr' + 'ipt>');
+        await settle(20);
+        assert.ok(summary(out).includes(' id=GTM-LATER001'), out.join(' | '));
+        assert.ok(summary(out).includes(' loader=/gtm.js'), out.join(' | '));
+        assert.ok(w.google_tag_manager['GTM-LATER001']);
+        // And the page's own pushes from before it started are not lost: the
+        // backlog is read when the layer is hooked.
+        assert.equal(
+            w.google_tag_manager['GTM-LATER001'].dataLayer.name, 'dataLayer'
+        );
+    });
     it('says on the console what it did', ( ) => {
         let out;
         boot({ before: w_ => { out = lines(w_); snippet()(w_); } });
@@ -975,6 +1032,21 @@ describe('googletagmanager_gtm', ( ) => {
 /******************************************************************************/
 
 describe('README, gtm', ( ) => {
+    it('offers the scriptlet form for a site whose CSP refuses a data: URI',
+    async ( ) => {
+        const fs = await import('node:fs/promises');
+        const path = await import('node:path');
+        const root = path.join(import.meta.dirname, '..');
+        const readme = await fs.readFile(path.join(root, 'README.md'), 'utf8');
+        // The limit is uBO's, not this resource's, and saying so is the
+        // difference between a user fixing it in one line and concluding the
+        // thing is broken.
+        assert.match(readme, /source URI is not allowed in this document/);
+        assert.match(readme, /\*##\+js\(googletagmanager_gtm\)/);
+        assert.match(readme, /replacing uBO's resource is a step backwards/);
+        assert.match(filtersText, /^\*##\+js\(googletagmanager_gtm\)$/m);
+    });
+
     it('lists every command the resource actually answers', async ( ) => {
         const fs = await import('node:fs/promises');
         const path = await import('node:path');
