@@ -63,6 +63,115 @@ function consentRRGtmCore(options) {
         return found;
     };
     const { id, layer, path } = settings();
+    const debugging = ( ) => {
+        try {
+            return w.localStorage.getItem('gtm-rr-debug') !== null;
+        } catch(ex) {
+        }
+        return false;
+    };
+    const debug = debugging();
+    const named = {};
+    const CAP = 160;
+    const snippet = value => {
+        const one = item => {
+            const type = typeof item;
+            if ( item === null ) { return 'null'; }
+            if ( type === 'undefined' ) { return 'undefined'; }
+            if ( type === 'function' ) { return 'function'; }
+            if ( type === 'string' ) { return JSON.stringify(item); }
+            if ( type === 'number' || type === 'boolean' ) { return String(item); }
+            if ( type === 'symbol' ) { return 'symbol'; }
+            if ( Array.isArray(item) ) { return '[' + item.length + ' items]'; }
+            try {
+                const keys = Object.keys(item);
+                const parts = [];
+                for ( const key of keys.slice(0, 8) ) {
+                    const held = item[key];
+                    const held_ = typeof held;
+                    if ( held_ === 'object' && held !== null ) {
+                        parts.push(key + ':{}');
+                    } else if ( held_ === 'function' ) {
+                        parts.push(key + ':function');
+                    } else {
+                        parts.push(key + ':' + JSON.stringify(held));
+                    }
+                }
+                if ( keys.length > 8 ) { parts.push('+' + (keys.length - 8)); }
+                return '{' + parts.join(',') + '}';
+            } catch(ex) {
+            }
+            return 'object';
+        };
+        try {
+            const items = [];
+            for ( const item of Array.from(value) ) { items.push(one(item)); }
+            const text = '[' + items.join(',') + ']';
+            if ( text.length <= CAP ) { return text; }
+            return text.slice(0, CAP) + '...';
+        } catch(ex) {
+        }
+        return 'unreadable';
+    };
+    const OURS = [
+        'caller', 'report', 'snippet', 'handle', 'absorb', 'callBack',
+        'unhide', 'wrapped', 'command', 'watch', 'consentRRGtm',
+    ];
+    const caller = ( ) => {
+        try {
+            const stack = String(new w.Error().stack || '');
+            for ( const line of stack.split('\n') ) {
+                const trimmed = line.trim();
+                if ( trimmed === '' ) { continue; }
+                if ( trimmed.startsWith('Error') ) { continue; }
+                if ( trimmed.indexOf('data:') !== -1 ) { continue; }
+                if ( trimmed.indexOf('<anonymous>') !== -1 ) { continue; }
+                if ( trimmed.indexOf('Proxy') !== -1 ) { continue; }
+                let own = false;
+                for ( const name of OURS ) {
+                    if ( trimmed.indexOf('at ' + name + ' ') === 0 ) { own = true; }
+                    if ( trimmed.indexOf(name + '@') === 0 ) { own = true; }
+                }
+                if ( own ) { continue; }
+                if ( trimmed.length <= 120 ) { return trimmed; }
+                return trimmed.slice(0, 120) + '...';
+            }
+        } catch(ex) {
+        }
+        return 'unknown';
+    };
+    const report = (where, property, value) => {
+        const key = where + '.' + property;
+        if ( Object.prototype.hasOwnProperty.call(named, key) ) { return; }
+        named[key] = true;
+        try {
+            w.console.info(
+                '[gtm-rr] ' + options.name + ' ' + VERSION +
+                ' missing=' + key +
+                ' id=' + (id !== '' ? id : 'unknown') +
+                (value !== undefined ? ' args=' + snippet(value) : '') +
+                ' from=' + caller()
+            );
+        } catch(ex) {
+        }
+    };
+    const watch = (object, where, known) => {
+        if ( debug === false ) { return object; }
+        try {
+            return new w.Proxy(object, {
+                get(target, property, receiver) {
+                    if ( typeof property === 'string' ) {
+                        if ( known.indexOf(property) === -1 ) {
+                            report(where, property);
+                        }
+                    }
+                    return Reflect.get(target, property, receiver);
+                },
+            });
+        } catch(ex) {
+        }
+        return object;
+    };
     const stamp = ( ) => {
         try {
             return new w.Date().getTime();
@@ -122,7 +231,10 @@ function consentRRGtmCore(options) {
             reset: ( ) => { values = {}; },
         };
     };
-    const container = model();
+    const container = watch(
+        model(), 'dataLayer',
+        [ 'name', 'get', 'set', 'reset' ]
+    );
     const absorb = item => {
         if ( item === null || typeof item !== 'object' ) { return; }
         if ( Object.prototype.toString.call(item) === '[object Arguments]' ) {
@@ -186,8 +298,18 @@ function consentRRGtmCore(options) {
         absorb(item);
         callBack(item);
         if ( typeof command !== 'function' ) { return; }
+        let answered = false;
         try {
-            command(item, w);
+            answered = command(item, w) === true;
+        } catch(ex) {
+        }
+        if ( debug === false || answered ) { return; }
+        try {
+            if ( Object.prototype.toString.call(item) !== '[object Arguments]' ) {
+                return;
+            }
+            if ( typeof item[0] !== 'string' ) { return; }
+            report('command', item[0], [].slice.call(item, 1));
         } catch(ex) {
         }
     };
@@ -272,7 +394,10 @@ function consentRRGtmCore(options) {
             });
         } catch(ex) {
         }
-        registry[id] = object;
+        registry[id] = watch(object, 'container', [
+            'dataLayer', 'bootstrap', 'callback',
+            'onHtmlSuccess', 'onHtmlFailure', 'consentRRGtm',
+        ]);
         if ( registry.rm === undefined || registry.rm === null ) {
             registry.rm = {};
         }
@@ -316,6 +441,8 @@ function consentRRGtmCore(options) {
     return {
         id, layer, path, hooked, installed, container, registry,
         hiding: ( ) => hiding,
+        debug,
+        report,
     };
 }
 function consentRRGtm() {
@@ -323,21 +450,27 @@ function consentRRGtm() {
     const NAME = 'googletagmanager_gtm';
     const VERSION = '1.0.0';
     const noopfn = ( ) => undefined;
+    let gaCalls = null;
     try {
-        if ( typeof w.ga !== 'function' ) { w.ga = noopfn; }
+        if ( typeof w.ga !== 'function' ) {
+            w.ga = function( ) {
+                if ( gaCalls === null ) { return; }
+                gaCalls(arguments);
+            };
+        }
     } catch(ex) {
     }
     let answered = 0;
     const command = (item, win) => {
         if ( Object.prototype.toString.call(item) !== '[object Arguments]' ) {
-            return;
+            return false;
         }
-        if ( item.length !== 4 ) { return; }
-        if ( item[0] !== 'get' ) { return; }
-        if ( typeof item[1] !== 'string' ) { return; }
-        if ( typeof item[2] !== 'string' ) { return; }
+        if ( item.length !== 4 ) { return false; }
+        if ( item[0] !== 'get' ) { return false; }
+        if ( typeof item[1] !== 'string' ) { return false; }
+        if ( typeof item[2] !== 'string' ) { return false; }
         const callback = item[3];
-        if ( typeof callback !== 'function' ) { return; }
+        if ( typeof callback !== 'function' ) { return false; }
         answered += 1;
         try {
             win.console.info(
@@ -354,12 +487,14 @@ function consentRRGtm() {
         };
         try {
             win.setTimeout(fire, 0);
-            return;
+            return true;
         } catch(ex) {
         }
         fire();
+        return true;
     };
-    const report = consentRRGtmCore({
+    const core = consentRRGtmCore({
+        name: NAME,
         paths: [ '/gtm.js', '/gtag/js' ],
         extrasFor: path => {
             if ( path !== '/gtm.js' ) { return {}; }
@@ -370,7 +505,18 @@ function consentRRGtm() {
         },
         command,
     });
-    if ( report === null ) { return; }
+    if ( core === null ) { return; }
+    const report = core;
+    if ( report.debug ) {
+        gaCalls = args => {
+            try {
+                report.report(
+                    'ga', String(args[0]), [].slice.call(args, 1)
+                );
+            } catch(ex) {
+            }
+        };
+    }
     try {
         w.console.info(
             '[gtm-rr] ' + NAME + ' ' + VERSION +
@@ -379,7 +525,8 @@ function consentRRGtm() {
             ' layer=' + report.layer +
             ' push=' + report.hooked +
             ' container=' + report.installed +
-            ' hide=' + report.hiding()
+            ' hide=' + report.hiding() +
+            ' debug=' + (report.debug ? 'on' : 'off')
         );
     } catch(ex) {
     }

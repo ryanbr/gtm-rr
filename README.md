@@ -81,6 +81,34 @@ three - and then answering the parts it has none for.
 | `gtag("get", …, callback)` | - | answered, with `undefined` |
 | no data layer yet | returns early, does nothing | creates it, as their loader does |
 
+## When a page half-works
+
+Turn on the reporting and reload:
+
+```js
+localStorage.setItem('gtm-rr-debug', '1')
+```
+
+Off - the default - it costs one storage read: nothing is wrapped and nothing
+is watched. On, anything the page asks for that this does not provide is named
+once, with what was passed and which script asked:
+
+```
+[gtm-rr] googletagmanager_gtm 1.0.0 missing=command.consent id=G-KQ9NC85WD9
+         args=["update",{ad_storage:"granted"}] from=at https://site/app.js:12:9
+[gtm-rr] googletagmanager_gtm 1.0.0 missing=container.SANDBOXED_JS_SEMAPHORE
+         id=G-KQ9NC85WD9 from=at https://site/tag.js:4:1
+```
+
+A command's arguments are echoed, because they are its value. A property's are
+not: a missing property had no value to read, and an `args=` there would be
+one this resource made up. What is echoed is shallow and capped, since the
+line is something you paste into a report.
+
+The objects it hands the page are watched through a get-only `Proxy`, so their
+keys, their values and their behaviour are unchanged - a page enumerating the
+container object sees exactly what Google's own would give it.
+
 ## Why an opt-out as well as a stub
 
 A redirect needs a URL to match. Where a site serves the loader from its own

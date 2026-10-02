@@ -93,8 +93,14 @@ function consentRRGtm() {
 
     // uBO's own resource does this, so standing in front of it has to.
     const noopfn = ( ) => undefined;
+    let gaCalls = null;
     try {
-        if ( typeof w.ga !== 'function' ) { w.ga = noopfn; }
+        if ( typeof w.ga !== 'function' ) {
+            w.ga = function( ) {
+                if ( gaCalls === null ) { return; }
+                gaCalls(arguments);
+            };
+        }
     } catch(ex) {
     }
 
@@ -104,14 +110,14 @@ function consentRRGtm() {
     // function.
     const command = (item, win) => {
         if ( Object.prototype.toString.call(item) !== '[object Arguments]' ) {
-            return;
+            return false;
         }
-        if ( item.length !== 4 ) { return; }
-        if ( item[0] !== 'get' ) { return; }
-        if ( typeof item[1] !== 'string' ) { return; }
-        if ( typeof item[2] !== 'string' ) { return; }
+        if ( item.length !== 4 ) { return false; }
+        if ( item[0] !== 'get' ) { return false; }
+        if ( typeof item[1] !== 'string' ) { return false; }
+        if ( typeof item[2] !== 'string' ) { return false; }
         const callback = item[3];
-        if ( typeof callback !== 'function' ) { return; }
+        if ( typeof callback !== 'function' ) { return false; }
         answered += 1;
         try {
             win.console.info(
@@ -130,13 +136,15 @@ function consentRRGtm() {
         };
         try {
             win.setTimeout(fire, 0);
-            return;
+            return true;
         } catch(ex) {
         }
         fire();
+        return true;
     };
 
-    const report = consentRRGtmCore({
+    const core = consentRRGtmCore({
+        name: NAME,
         paths: [ '/gtm.js', '/gtag/js' ],
         // The container's two fields go on only where this is standing in for
         // the container.
@@ -149,7 +157,21 @@ function consentRRGtm() {
         },
         command,
     });
-    if ( report === null ) { return; }
+    if ( core === null ) { return; }
+    const report = core;
+    // Their own resource noops ga and says nothing. With debugging on, what a
+    // page called it with is worth having: it means analytics.js was blocked
+    // without a stub of its own.
+    if ( report.debug ) {
+        gaCalls = args => {
+            try {
+                report.report(
+                    'ga', String(args[0]), [].slice.call(args, 1)
+                );
+            } catch(ex) {
+            }
+        };
+    }
 
     try {
         w.console.info(
@@ -159,7 +181,8 @@ function consentRRGtm() {
             ' layer=' + report.layer +
             ' push=' + report.hooked +
             ' container=' + report.installed +
-            ' hide=' + report.hiding()
+            ' hide=' + report.hiding() +
+            ' debug=' + (report.debug ? 'on' : 'off')
         );
     } catch(ex) {
     }

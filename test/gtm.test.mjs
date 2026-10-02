@@ -570,6 +570,154 @@ describe('googletagmanager_gtm', ( ) => {
         assert.ok(w.google_tag_manager[ID]);
     });
 
+    // Off by default, so the tests that want it say so.
+    const debugOn = w_ => {
+        try {
+            w_.localStorage.setItem('gtm-rr-debug', '1');
+        } catch(ex) {
+        }
+    };
+
+    it('says nothing about what a page reads while debugging is off', ( ) => {
+        let out;
+        const w = boot({ before: w_ => { out = lines(w_); snippet()(w_); } });
+        // Nothing is wrapped when it is off, so nothing can be reported.
+        w.google_tag_manager[ID].somethingWeDoNotHave;
+        w.google_tag_manager[ID].dataLayer.alsoNot;
+        assert.equal(out.length, 1);
+        assert.ok(out[0].includes(' debug=off'), out[0]);
+    });
+
+    it('names what a page reads that is not here', ( ) => {
+        let out;
+        const w = boot({
+            before: w_ => { debugOn(w_); out = lines(w_); snippet()(w_); },
+        });
+        assert.ok(out[0].includes(' debug=on'), out[0]);
+        const container = w.google_tag_manager[ID];
+        // Their own registry carries more than this provides - the sandboxed
+        // JS semaphore, their tag queue, their macro cache - and a page or a
+        // tag template reading one of them is the thing worth knowing.
+        container.SANDBOXED_JS_SEMAPHORE;
+        container.dataLayer.getUntrusted;
+        assert.ok(
+            out.some(l => l.includes(' missing=container.SANDBOXED_JS_SEMAPHORE')),
+            out.join(' | ')
+        );
+        assert.ok(out.some(l => l.includes(' missing=dataLayer.getUntrusted')),
+            out.join(' | '));
+        // Each name once, however often it is read.
+        const before_ = out.length;
+        container.SANDBOXED_JS_SEMAPHORE;
+        container.SANDBOXED_JS_SEMAPHORE;
+        assert.equal(out.length, before_);
+    });
+
+    it('leaves what it does provide unremarked, and working', ( ) => {
+        let out;
+        const w = boot({
+            before: w_ => { debugOn(w_); out = lines(w_); snippet()(w_); },
+        });
+        const container = w.google_tag_manager[ID];
+        container.dataLayer.set('page', { title: 'Home' });
+        assert.equal(container.dataLayer.get('page.title'), 'Home');
+        assert.equal(container.bootstrap > 0, true);
+        assert.equal(typeof container.callback, 'function');
+        // Watched through a get-only proxy, so the keys a page enumerates are
+        // the ones theirs would have.
+        assert.deepEqual(Object.keys(container).sort(), [
+            'bootstrap', 'callback', 'dataLayer', 'onHtmlFailure',
+            'onHtmlSuccess',
+        ]);
+        assert.equal(out.length, 1, out.join(' | '));
+    });
+
+    it('echoes what a page passed, and who asked', async ( ) => {
+        let out;
+        const w = bootGtag(w_ => { debugOn(w_); out = lines(w_); });
+        w.gtag('consent', 'update', { ad_storage: 'granted' });
+        await settle(10);
+        const line = out.find(l => l.includes(' missing=command.consent'));
+        assert.ok(line !== undefined, out.join(' | '));
+        // A command's arguments are its value, so they are echoed.
+        assert.ok(line.includes('args=["update",{ad_storage:"granted"}]'), line);
+        // And which script asked, which is what makes a report chaseable.
+        assert.ok(/ from=\S/.test(line), line);
+    });
+
+    it('shows no value for a property, because there is none', ( ) => {
+        let out;
+        const w = boot({
+            before: w_ => { debugOn(w_); out = lines(w_); snippet()(w_); },
+        });
+        w.google_tag_manager[ID].somethingMissing;
+        const line = out.find(l => l.includes(' missing=container.somethingMissing'));
+        assert.ok(line !== undefined, out.join(' | '));
+        // Missing means there was nothing to read, so an args= would be
+        // reporting a value this resource made up.
+        assert.equal(line.includes(' args='), false);
+    });
+
+    it('keeps what it echoes short', async ( ) => {
+        let out;
+        const w = bootGtag(w_ => { debugOn(w_); out = lines(w_); });
+        // A console line is something a visitor pastes into a report, so a
+        // page passing a page's worth of data does not get a page's worth of
+        // line.
+        w.eval('gtag("event", "big", { note: "x".repeat(400) });');
+        await settle(10);
+        const line = out.find(l => l.includes(' missing=command.event'));
+        const args = /args=(.*?) from=/.exec(line);
+        assert.ok(args !== null, line);
+        assert.ok(args[1].length <= 164, args[1].length + ': ' + args[1]);
+        assert.ok(args[1].endsWith('...'), args[1].slice(-20));
+    });
+
+    it('survives what a page hands it', async ( ) => {
+        let out;
+        const w = bootGtag(w_ => { debugOn(w_); out = lines(w_); });
+        // Circular, and a getter that throws when read: both are things a
+        // page can pass, and neither may throw in here - this runs inside the
+        // page's own call to push.
+        w.eval('window.__awkward = { ok: 1 };' +
+            'window.__awkward.self = window.__awkward;' +
+            'Object.defineProperty(window.__awkward, "boom", {' +
+            ' enumerable: true, get: function(){ throw new Error("no"); } });' +
+            'gtag("event", "awkward", window.__awkward);');
+        await settle(10);
+        const line = out.find(l => l.includes(' missing=command.awkward')) ||
+            out.find(l => l.includes(' missing=command.event'));
+        assert.ok(line !== undefined, out.join(' | '));
+        // Something was said, and the page carried on.
+        assert.ok(line.includes(' args='), line);
+        assert.equal(w.dataLayer.length > 0, true);
+    });
+
+    it('names a gtag command that went nowhere', async ( ) => {
+        let out;
+        const w = bootGtag(w_ => { debugOn(w_); out = lines(w_); });
+        w.gtag('consent', 'update', { ad_storage: 'granted' });
+        w.gtag('event', 'purchase', { value: 1 });
+        await settle(10);
+        assert.ok(out.some(l => l.includes(' missing=command.consent')),
+            out.join(' | '));
+        assert.ok(out.some(l => l.includes(' missing=command.event')),
+            out.join(' | '));
+        // The one that is answered is not reported as missing.
+        w.gtag('get', 'G-KQ9NC85WD9', 'client_id', ( ) => {});
+        await settle(10);
+        assert.equal(out.some(l => l.includes(' missing=command.get')), false);
+    });
+
+    it('names what a page called ga with', ( ) => {
+        let out;
+        const w = boot({
+            before: w_ => { debugOn(w_); out = lines(w_); snippet()(w_); },
+        });
+        w.ga('send', 'pageview');
+        assert.ok(out.some(l => l.includes(' missing=ga.send')), out.join(' | '));
+    });
+
     it('does nothing the second time it is injected', async ( ) => {
         const w = boot({ before: snippet() });
         await settle(60);
@@ -615,7 +763,8 @@ describe('googletagmanager_gtm', ( ) => {
             out[0],
             '[gtm-rr] googletagmanager_gtm ' + versions.gtm +
             ' loader=/gtm.js id=' + ID +
-            ' layer=dataLayer push=hooked container=installed hide=absent'
+            ' layer=dataLayer push=hooked container=installed hide=absent' +
+            ' debug=off'
         );
     });
 });

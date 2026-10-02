@@ -166,6 +166,155 @@ function consentRRGtmCore(options) {
 
     const { id, layer, path } = settings();
 
+    // Off unless a visitor turns it on, because a page that half-works is
+    // reported as "it half-works" and the useful question is which part of
+    // their API the site asked for that is not here. When on, a read of
+    // anything this does not provide is named once.
+    //
+    //   localStorage.setItem('gtm-rr-debug', '1')   then reload
+    //
+    // Off, it costs one storage read; nothing is wrapped and nothing is
+    // watched. On, the objects this hands the page are watched through a
+    // get-only Proxy, which leaves their keys, their values and their own
+    // behaviour alone - a page enumerating the container object still sees
+    // exactly what it would have.
+    const debugging = ( ) => {
+        try {
+            return w.localStorage.getItem('gtm-rr-debug') !== null;
+        } catch(ex) {
+        }
+        return false;
+    };
+
+    const debug = debugging();
+    const named = {};
+
+    // What a page passed, bounded and shallow. A console line is something a
+    // visitor pastes into a bug report, so this stays short, never walks into
+    // an object's own getters twice, and never throws over something it was
+    // handed.
+    const CAP = 160;
+
+    const snippet = value => {
+        const one = item => {
+            const type = typeof item;
+            if ( item === null ) { return 'null'; }
+            if ( type === 'undefined' ) { return 'undefined'; }
+            if ( type === 'function' ) { return 'function'; }
+            if ( type === 'string' ) { return JSON.stringify(item); }
+            if ( type === 'number' || type === 'boolean' ) { return String(item); }
+            if ( type === 'symbol' ) { return 'symbol'; }
+            if ( Array.isArray(item) ) { return '[' + item.length + ' items]'; }
+            try {
+                const keys = Object.keys(item);
+                const parts = [];
+                for ( const key of keys.slice(0, 8) ) {
+                    const held = item[key];
+                    const held_ = typeof held;
+                    if ( held_ === 'object' && held !== null ) {
+                        parts.push(key + ':{}');
+                    } else if ( held_ === 'function' ) {
+                        parts.push(key + ':function');
+                    } else {
+                        parts.push(key + ':' + JSON.stringify(held));
+                    }
+                }
+                if ( keys.length > 8 ) { parts.push('+' + (keys.length - 8)); }
+                return '{' + parts.join(',') + '}';
+            } catch(ex) {
+            }
+            return 'object';
+        };
+        try {
+            const items = [];
+            for ( const item of Array.from(value) ) { items.push(one(item)); }
+            const text = '[' + items.join(',') + ']';
+            if ( text.length <= CAP ) { return text; }
+            return text.slice(0, CAP) + '...';
+        } catch(ex) {
+        }
+        return 'unreadable';
+    };
+
+    // Which script asked, which is the part a report needs to be chased at
+    // all. Everything of this resource's own is dropped first: its functions
+    // by name, since they are all here; the frame it runs from, which served
+    // as a redirect is a data: URI and injected as a scriptlet has no url;
+    // and anything a browser could not place. What is left is the page's.
+    //
+    // A browser gives the page's own script and line. jsdom runs everything
+    // through eval and places none of it, and answers unknown - which is
+    // honest about what it knows rather than pointing at the wrong thing.
+    const OURS = [
+        'caller', 'report', 'snippet', 'handle', 'absorb', 'callBack',
+        'unhide', 'wrapped', 'command', 'watch', 'consentRRGtm',
+    ];
+
+    const caller = ( ) => {
+        try {
+            const stack = String(new w.Error().stack || '');
+            for ( const line of stack.split('\n') ) {
+                const trimmed = line.trim();
+                if ( trimmed === '' ) { continue; }
+                if ( trimmed.startsWith('Error') ) { continue; }
+                if ( trimmed.indexOf('data:') !== -1 ) { continue; }
+                if ( trimmed.indexOf('<anonymous>') !== -1 ) { continue; }
+                if ( trimmed.indexOf('Proxy') !== -1 ) { continue; }
+                let own = false;
+                for ( const name of OURS ) {
+                    // "at caller (...)" and "caller@..." are the two shapes.
+                    if ( trimmed.indexOf('at ' + name + ' ') === 0 ) { own = true; }
+                    if ( trimmed.indexOf(name + '@') === 0 ) { own = true; }
+                }
+                if ( own ) { continue; }
+                if ( trimmed.length <= 120 ) { return trimmed; }
+                return trimmed.slice(0, 120) + '...';
+            }
+        } catch(ex) {
+        }
+        return 'unknown';
+    };
+
+    const report = (where, property, value) => {
+        // Each name once: a page reading the same missing thing in a loop
+        // should say so once, not fill the console.
+        const key = where + '.' + property;
+        if ( Object.prototype.hasOwnProperty.call(named, key) ) { return; }
+        named[key] = true;
+        try {
+            // A property that is missing has no value to show - that is what
+            // missing means - so what goes out is the name and who asked. A
+            // command's arguments are its value, and those are echoed.
+            w.console.info(
+                '[gtm-rr] ' + options.name + ' ' + VERSION +
+                ' missing=' + key +
+                ' id=' + (id !== '' ? id : 'unknown') +
+                (value !== undefined ? ' args=' + snippet(value) : '') +
+                ' from=' + caller()
+            );
+        } catch(ex) {
+        }
+    };
+
+    // Only where it is on, and only for what the page asks for by name.
+    const watch = (object, where, known) => {
+        if ( debug === false ) { return object; }
+        try {
+            return new w.Proxy(object, {
+                get(target, property, receiver) {
+                    if ( typeof property === 'string' ) {
+                        if ( known.indexOf(property) === -1 ) {
+                            report(where, property);
+                        }
+                    }
+                    return Reflect.get(target, property, receiver);
+                },
+            });
+        } catch(ex) {
+        }
+        return object;
+    };
+
     const stamp = ( ) => {
         try {
             return new w.Date().getTime();
@@ -234,7 +383,10 @@ function consentRRGtmCore(options) {
         };
     };
 
-    const container = model();
+    const container = watch(
+        model(), 'dataLayer',
+        [ 'name', 'get', 'set', 'reset' ]
+    );
 
     const absorb = item => {
         if ( item === null || typeof item !== 'object' ) { return; }
@@ -335,8 +487,23 @@ function consentRRGtmCore(options) {
         absorb(item);
         callBack(item);
         if ( typeof command !== 'function' ) { return; }
+        let answered = false;
         try {
-            command(item, w);
+            answered = command(item, w) === true;
+        } catch(ex) {
+        }
+        if ( debug === false || answered ) { return; }
+        // A command that went nowhere, which is most of them and the point of
+        // this resource - but worth naming when a page is misbehaving, since
+        // the one it was waiting on will be in here.
+        try {
+            if ( Object.prototype.toString.call(item) !== '[object Arguments]' ) {
+                return;
+            }
+            if ( typeof item[0] !== 'string' ) { return; }
+            // Their command name, and what the page passed with it: the one
+            // a misbehaving page was waiting on will be in here.
+            report('command', item[0], [].slice.call(item, 1));
         } catch(ex) {
         }
     };
@@ -441,7 +608,10 @@ function consentRRGtmCore(options) {
             });
         } catch(ex) {
         }
-        registry[id] = object;
+        registry[id] = watch(object, 'container', [
+            'dataLayer', 'bootstrap', 'callback',
+            'onHtmlSuccess', 'onHtmlFailure', 'consentRRGtm',
+        ]);
         if ( registry.rm === undefined || registry.rm === null ) {
             registry.rm = {};
         }
@@ -489,5 +659,7 @@ function consentRRGtmCore(options) {
     return {
         id, layer, path, hooked, installed, container, registry,
         hiding: ( ) => hiding,
+        debug,
+        report,
     };
 }

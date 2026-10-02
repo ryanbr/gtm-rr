@@ -167,28 +167,105 @@ export default [
     {
         label: 'any command is answered as a get',
         file: GTM,
-        from: `        if ( item[0] !== 'get' ) { return; }`,
+        from: `        if ( item[0] !== 'get' ) { return false; }`,
         to: '',
     },
     {
         label: 'a plain object is read as a command',
         file: GTM,
         from: `        if ( Object.prototype.toString.call(item) !== '[object Arguments]' ) {
-            return;
+            return false;
         }`,
         to: '',
     },
     {
         label: 'the ga noop uBO put up is dropped',
         file: GTM,
-        from: `        if ( typeof w.ga !== 'function' ) { w.ga = noopfn; }`,
+        from: `        if ( typeof w.ga !== 'function' ) {
+            w.ga = function( ) {
+                if ( gaCalls === null ) { return; }
+                gaCalls(arguments);
+            };
+        }`,
         to: '',
     },
     {
         label: 'a better ga stub is overwritten',
         file: GTM,
-        from: `        if ( typeof w.ga !== 'function' ) { w.ga = noopfn; }`,
-        to: '        w.ga = noopfn;',
+        from: `        if ( typeof w.ga !== 'function' ) {`,
+        to: '        if ( true ) {',
+    },
+
+    // The debug reporting, which is off unless a visitor turns it on.
+    {
+        label: 'debug: on by default',
+        file: CORE,
+        from: "            return w.localStorage.getItem('gtm-rr-debug') !== null;",
+        to: '            return true;',
+    },
+    {
+        label: 'debug: nothing is watched',
+        file: CORE,
+        from: '        if ( debug === false ) { return object; }',
+        to: '        return object;',
+    },
+    {
+        label: 'debug: known names reported too',
+        file: CORE,
+        from: '                        if ( known.indexOf(property) === -1 ) {',
+        to: '                        if ( true ) {',
+    },
+    {
+        label: 'debug: a name is reported every time',
+        file: CORE,
+        from: `        if ( Object.prototype.hasOwnProperty.call(named, key) ) { return; }
+        named[key] = true;`,
+        to: '',
+    },
+    {
+        label: 'debug: an answered command is reported missing',
+        file: CORE,
+        from: '        if ( debug === false || answered ) { return; }',
+        to: '        if ( debug === false ) { return; }',
+    },
+    {
+        label: 'debug: the proxy changes what a page reads',
+        file: CORE,
+        from: '                    return Reflect.get(target, property, receiver);',
+        to: '                    return undefined;',
+    },
+    {
+        label: 'debug: ga calls are not named',
+        file: GTM,
+        from: `                report.report(
+                    'ga', String(args[0]), [].slice.call(args, 1)
+                );`,
+        to: '',
+    },
+
+    {
+        label: 'debug: command arguments are not echoed',
+        file: CORE,
+        from: "            report('command', item[0], [].slice.call(item, 1));",
+        to: "            report('command', item[0]);",
+    },
+    {
+        label: 'debug: a value is invented for a missing property',
+        file: CORE,
+        from: "                (value !== undefined ? ' args=' + snippet(value) : '') +",
+        to: "                ' args=' + snippet(value) +",
+    },
+    {
+        label: 'debug: what is echoed is unbounded',
+        file: CORE,
+        from: "            if ( text.length <= CAP ) { return text; }\n            return text.slice(0, CAP) + '...';",
+        to: '            return text;',
+    },
+    {
+        label: 'debug: the caller is not named',
+        file: CORE,
+        from: "                ' from=' + caller()",
+        to: "                ''",
     },
 
     // The opt-out, which is a different job in the same repo.
