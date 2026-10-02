@@ -35,18 +35,14 @@ uBlock Origin fetches user resources from the URLs in its hidden setting
 `userResourcesLocation` (Settings > Advanced > click `advanced settings`):
 
 ```
-https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.0.0/dist/googletagmanager_gtm.js
-https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.0.0/dist/ga-optout.js
-```
-
-or
-
-```
-https://cdn.jsdelivr.net/npm/gtm-rr@1.0.0/dist/googletagmanager_gtm.js
-https://cdn.jsdelivr.net/npm/gtm-rr@1.0.0/dist/ga-optout.js
+https://raw.githubusercontent.com/ryanbr/gtm-rr/main/dist/googletagmanager_gtm.js
+https://raw.githubusercontent.com/ryanbr/gtm-rr/main/dist/ga-optout.js
 ```
 
 The setting takes several whitespace-separated URLs.
+
+These point at `main`, so they follow it: there is no release to pin to yet.
+When there is one, the URLs here become a tag.
 
 **For the first one that is the whole install.** uBO's default lists already
 send both loaders to `googletagmanager_gtm.js`:
@@ -80,6 +76,46 @@ three - and then answering the parts it has none for.
 | `gtm.dom` / `gtm.load` | - | pushed, once each, as theirs does |
 | `gtag("get", …, callback)` | - | answered, with `undefined` |
 | no data layer yet | returns early, does nothing | creates it, as their loader does |
+
+## What it answers
+
+Everything a page can rely on, and where it came from in their own code:
+
+| a page does | this answers with |
+|---|---|
+| `dataLayer.push(obj)` | the array's own `push` return value - the array is the page's and is never replaced |
+| `dataLayer.push({…, eventCallback})` | the callback, on the next tick, applied with itself as `this` and no arguments, as their `k.apply(k, …)` does |
+| `dataLayer.push({…, eventTimeout})` | the same; their timeout is an upper bound and nothing here takes time |
+| `google_tag_manager[id]` | their `RU()` object: `dataLayer`, `bootstrap`, `callback`, and on `gtm.js` only, `onHtmlSuccess` and `onHtmlFailure` |
+| `…[id].bootstrap` | a timestamp, as theirs is once the container has booted - not the `0` it starts at |
+| `…[id].dataLayer.get('a.b')` | their model's dotted-path read, over what the page itself pushed |
+| `…[id].dataLayer.set(k, v)` / `.reset()` | the same model, theirs field for field |
+| `google_tag_manager[dataLayer]` | the entry theirs keeps `subscribers`, `gtmDom` and `gtmLoad` on |
+| `google_tag_manager.rm` | their macro-resolver map, empty |
+| a `gtm.dom` or `gtm.load` trigger | both pushed, once each, as theirs pushes them |
+| `gtag('get', target, field, cb)` | `cb(undefined)`, deferred, as their `RD.get` defers it |
+| `dataLayer.hide.end()` (anti-flicker) | ended their way: own entry cleared, and only ended when no other container is still expected |
+| `ga(…)` | a noop, which uBO's own resource also puts up - and a better stub is left alone |
+| a renamed data layer (`&l=`) | read off the script's own `src`, with the container id |
+
+## What it does not answer
+
+Deliberately, and each one documented in the source with the reason:
+
+| | why not |
+|---|---|
+| tags, requests, cookies | the point. Nothing is fetched and nothing is written |
+| `google_tag_data` (consent mode state) | theirs builds it only where a consent API is used, and every reader in the field guards for it. A state here would tell a consent manager that defaults had been set when nothing set them |
+| `gaGlobal` | their visitor-id cache. There is no visitor id, because nothing is measuring |
+| `gtag` itself | neither loader defines it. The page's own snippet does, and defining one would replace the page's |
+| every `gtag` command but `get` | `config`, `event`, `set`, `consent`, `policy` and the rest are about sending, which is what does not happen. They are taken without throwing |
+| `gtm.init`, `gtm.init_consent` | theirs pushes them onto its own internal queue, never the data layer, so page code never sees them either |
+| `gtm.uniqueEventId` | an id for their own queue |
+| auto-event pushes (`gtm.click`, `gtm.formSubmit`, `gtm.historyChange`, …) | theirs only installs those listeners where the container has a trigger for them, and its own triggers are what consume them. If you find a page that waits on one, that is worth an issue |
+
+Anything in the first table that misbehaves is a bug here. Anything in the
+second is a decision - and if a site needs one of them, the reporting below
+will name it.
 
 ## When a page half-works
 

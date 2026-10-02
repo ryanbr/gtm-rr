@@ -92,3 +92,9 @@ mutation at a time, and checks the suite notices.
 map. Bump the family's entry when its resources change, the repo version when
 releasing, and the pinned URLs in `README.md` - the build refuses to run if a
 pinned URL names a different version. Most pushes are not releases.
+
+**There is no release yet, so the install URLs in `README.md` point at `main`
+and the build's pin check has nothing to check.** The first release has to put
+a tag in those URLs - `gtm-rr/v1.0.0/dist/...` - which is also what turns the
+check back on. Until then an install follows `main`, which is honest about what
+it is but means a user gets a change the moment it lands.

@@ -974,6 +974,28 @@ describe('googletagmanager_gtm', ( ) => {
 
 /******************************************************************************/
 
+describe('README, gtm', ( ) => {
+    it('lists every command the resource actually answers', async ( ) => {
+        const fs = await import('node:fs/promises');
+        const path = await import('node:path');
+        // Paths rather than URLs: this suite has its own URL binding, and a
+        // new URL(...) in here finds a string.
+        const root = path.join(import.meta.dirname, '..');
+        const readme = await fs.readFile(path.join(root, 'README.md'), 'utf8');
+        // The table says get is the only command answered. If another one
+        // ever is, the table is wrong - and a README that lies about which
+        // calls work is worse than one that says nothing.
+        const resource = await fs.readFile(
+            path.join(root, 'src/gtm/lib/gtm-core.js'), 'utf8'
+        );
+        assert.match(resource, /item\[0\] !== 'get'/);
+        assert.match(readme, /every `gtag` command but `get`/);
+        // And the two things it must not define are still listed as such.
+        assert.match(readme, /`google_tag_data` \(consent mode state\)/);
+        assert.match(readme, /`gtag` itself/);
+    });
+});
+
 describe('filters, gtm', ( ) => {
     it('ships under uBO own resource name, which replaces the built-in',
     async ( ) => {
