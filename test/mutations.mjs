@@ -14,6 +14,7 @@
 const CORE = 'src/shared/lib/core.js';
 const GTM = 'src/gtm/lib/gtm-core.js';
 const GA = 'src/ga/lib/ga-optout-core.js';
+const TAG = 'src/tag/gtm-tag.js';
 
 export default [
 
@@ -535,5 +536,52 @@ export default [
         file: GA,
         from: '    if ( w[FLAG] === VERSION ) { return; }',
         to: '',
+    },
+
+    // The one-tag loader, where the url comes from the filter.
+    {
+        label: 'tag: a placeholder is loaded as a url',
+        file: TAG,
+        from: "    if ( unfilled(url) || url === '' ) { return; }",
+        to: '',
+    },
+    {
+        label: 'tag: anything but https is accepted',
+        file: TAG,
+        from: "    if ( wanted.protocol !== 'https:' ) {\n        say('refused=not-https url=' + wanted.protocol);\n        return;\n    }",
+        to: '',
+    },
+    {
+        label: 'tag: loaded again on every run',
+        file: TAG,
+        from: '            if ( w[MARKER][id] === true ) { return true; }',
+        to: '',
+    },
+    {
+        label: 'tag: the marker is this function own name',
+        file: TAG,
+        from: "    const MARKER = 'consentRRGtmTagLoaded';",
+        to: "    const MARKER = 'consentRRGtmTag';",
+    },
+    {
+        label: 'tag: does not wait for the global it needs',
+        file: TAG,
+        from: '        if ( ready() ) { inject(); }\n        else { look(); }',
+        to: '        inject();',
+    },
+    {
+        label: 'tag: injects while the page is still parsing',
+        file: TAG,
+        from: "        if ( doc.readyState !== 'loading' ) { begin(); }\n" +
+            "        else {\n" +
+            "            doc.addEventListener('DOMContentLoaded', begin, " +
+            "{ once: true });\n        }",
+        to: '        begin();',
+    },
+    {
+        label: 'tag: waits for ever',
+        file: TAG,
+        from: '            if ( waited >= UNTIL ) {',
+        to: '            if ( false ) {',
     },
 ];

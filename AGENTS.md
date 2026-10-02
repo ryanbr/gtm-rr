@@ -103,6 +103,35 @@ Carried over from consent-rr, where each cost a release:
   attribute. uBO redirects at the network layer, so the element keeps what the
   page wrote; the `data:` URI it actually fetches never appears in the DOM.
 
+## When the container is the loader
+
+Some sites keep page functionality in a Custom HTML tag: a map, a player, a
+store locator, or a consent manager that gates one of those. The stub cannot
+bring those back - it answers the API and has no idea what was configured - and
+`gtm-tag.js` is the way out that does not mean allowing the container: the
+tag's url goes in the filter and only that one script loads.
+
+- **Decide it with the container, not with a guess.** `npm run tags -- GTM-ID`
+  reads the container, pulls the `<script src>` out of its `__html` tags, drops
+  the known ad and analytics hosts, and prints a ready-made filter line for
+  what is left. Of three real containers, two inject nothing but pixels. So
+  the answer to "should we mirror GTM's tag injection" is no: there is usually
+  nothing to inject, and when there is, it is one url that a person should
+  look at before loading it.
+- Reading a container by hand: the tags are double-escaped, so `\x3d` in a
+  `vtp_html` string is a `=` and a naive extract truncates the url at the
+  first one. `tools/tags.mjs` un-escapes before it matches.
+- **A name the tag waits for can be a placeholder.** petzl.com's dealer page
+  defines `window.initGmaps = window.initGmaps || function() { };` in the head
+  so their other pages do not throw, and assigns the real one from a script at
+  the foot. `typeof w[needs] === 'function'` was true for the empty one, so the
+  tag is held until the document has parsed as well - which is also when their
+  own tags would have fired.
+- The once-marker is a name of its own (`consentRRGtmTagLoaded`), never the
+  function's name: re-injected, the hoisted function declaration overwrites
+  whatever was stored there and the guard is lost. That has been got wrong
+  twice in this repo.
+
 ## Testing
 
 `npm test` builds, then runs the suite **against `dist/`**, parsed with uBO's
@@ -125,8 +154,11 @@ mutation at a time, and checks the suite notices.
 - jsdom delivers `DOMContentLoaded` in the same turn as an insertion, so a test
   that wants to prove *when* something ran has to remove the other paths - run
   against an already-loaded document rather than trusting a timing assertion.
-- Don't write a mutation that leaves a long timer pending: `node --test` waits
-  for the event loop to drain and will hang instead of failing.
+- A test that lets a resource poll must `close()` its jsdom window in a
+  `finally`. The mutation that removes a give-up leaves that poll running for
+  ever, and `node --test` waits for the event loop to drain: the mutation is
+  reported `hung` instead of `caught`, and closing the window is what makes it
+  fail properly.
 
 ## Releasing
 

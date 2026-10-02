@@ -56,6 +56,43 @@
 *##+js(googletagmanager_gtm)
 
 ! -----------------------------------------------------------------------------
+! Where a site keeps page functionality inside its container, replacing the
+! container cannot bring it back: googletagmanager_gtm.js answers the API and
+! has no idea which tags were configured. The usual way out is to allow the
+! container, which runs every other tag in it too.
+!
+! gtm-tag is the other way out: the tag's url goes in the filter, so only that
+! one script loads. A second argument names a global the tag needs first - a
+! loader asked for with &callback=fn throws if it arrives before the page has
+! defined fn.
+!
+! Worked example, petzl.com's dealer locator, where the chain inside the
+! container is OneTrust, then consent, then a Maps tag whose callback renders
+! the map. Only the Maps tag is page functionality, so only it is loaded - no
+! container, no consent manager, nothing else it carried. Commented because it
+! carries that site's own API key, which belongs in your own filters rather
+! than in a list:
+!
+! petzl.com##+js(gtm-tag, https://maps.googleapis.com/maps/api/js?v=3.31&key=<their-key>&callback=initGmaps, initGmaps)
+!
+! That second argument is a name, and a page may give the same name twice:
+! petzl's head defines an empty initGmaps so their other pages do not throw,
+! and the real one arrives from a script at the foot of the page. The tag is
+! held until the page has parsed for exactly that reason, so what answers the
+! callback is the real one.
+!
+! Find a container's functional tags without a browser:
+!
+!   npm run tags -- GTM-XXXXXXX
+!
+! which reads the container, lists the scripts its __html tags inject, drops
+! the ones that are plainly ad or analytics infrastructure, and prints a
+! ready-made line for each of the rest. Most containers have none: of three
+! real ones, two injected nothing but pixels.
+! -----------------------------------------------------------------------------
+example.com##+js(gtm-tag, https://host.example/thing.js)
+
+! -----------------------------------------------------------------------------
 ! Where a redirect cannot land at all - an inlined bundle, or a path a rule
 ! cannot match - the resource has nothing to stand in front of, and the
 ! scriptlet form would be answering for a loader that is still running. Use

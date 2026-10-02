@@ -2,7 +2,7 @@
 
 Google Tag Manager resource replacements for uBlock Origin.
 
-Two resources:
+Three resources:
 
 - **`googletagmanager_gtm.js`** stands in for both of Google's loaders -
   `gtm.js` and `gtag/js` - and ships under uBlock Origin's own resource name,
@@ -14,6 +14,11 @@ Two resources:
   reach: a loader on the site's own domain, behind a proxied path, or inlined
   in the page. The page keeps a real, working Google bundle that declines to
   send.
+- **`gtm-tag.js`** is for the sites where the container *is* the loader for
+  something the page needs - a map, a player, a store locator. The tag's url
+  goes in the filter, so that one script loads and the container still does
+  not. Per site, by hand, and read [What it cannot
+  do](#what-it-cannot-do) before using it.
 
 Blocking `gtm.js` outright is easy and usually enough. It stops being enough
 when a site puts its own functionality inside the container, because that code
@@ -35,14 +40,15 @@ uBlock Origin fetches user resources from the URLs in its hidden setting
 `userResourcesLocation` (Settings > Advanced > click `advanced settings`):
 
 ```
-https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.1.4/dist/googletagmanager_gtm.js
-https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.1.4/dist/ga-optout.js
+https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.0/dist/googletagmanager_gtm.js
+https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.0/dist/ga-optout.js
+https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.0/dist/gtm-tag.js
 ```
 
 The setting takes several whitespace-separated URLs.
 
 These are pinned to a release, so an install stays where it is until you move
-it. `main` in place of `v1.0.0` follows the branch instead, which is useful for
+it. `main` in place of `v1.2.0` follows the branch instead, which is useful for
 testing a fix and not for leaving in place.
 
 **Use the redirect and the scriptlet together.** `filters/gtm.txt` carries the
@@ -300,21 +306,37 @@ middle links are Custom HTML tags inside `GTM-MWKBJV`:
 
 Neither the OneTrust tenant id nor the Maps key appears anywhere in the page,
 so no stub can produce them without shipping a copy of someone's container
-config - which would be stale the moment they edit it, and would mean *loading*
-OneTrust and Maps. On a site like that, letting `gtm.js` through is the only
-answer, and then the thing to replace is the consent manager rather than the
-container.
+config, which would be stale the moment they edit it.
 
-Two commands identify such a site before you go hunting in a browser:
+**What you can do is load that one tag and nothing else.** `gtm-tag` takes the
+url in the filter, so the container never runs and none of the rest of it does
+either:
 
-```sh
-curl -s 'https://www.googletagmanager.com/gtm.js?id=<ID>' > c.js
-grep -o '"function":"__html"[^}]*' c.js | grep -o 'src=\\"[^\\]*' | sort -u
+```
+petzl.com##+js(gtm-tag, https://maps.googleapis.com/maps/api/js?v=3.31&key=<their-key>&callback=initGmaps, initGmaps)
 ```
 
-Anything with a `<script src=` in a `__html` tag is page functionality a stub
-cannot replace. Their own `"metadata"` field often names the purpose - both
-entries above are tagged `["map"]`.
+The second argument is a global the tag needs before it arrives: a loader asked
+for with `&callback=initGmaps` throws if it lands first. It is a *name*, and a
+page can give the same name twice - petzl's head defines an empty `initGmaps`
+so their other pages do not throw, and the real one comes from a script at the
+foot of the page - so the tag is held until the page has parsed, and what
+answers the callback is the real one.
+
+Note what this is: a url in a filter, pinned by hand. It can go stale when the
+site edits its container, and it loads a third-party script, so keep these in
+your own filters where you can see what the url is.
+
+`npm run tags -- GTM-XXXXXXX` finds the candidates without a browser: it reads
+the container, lists the scripts its Custom HTML tags inject, drops the ones
+that are plainly ad or analytics infrastructure, and prints a ready-made line
+for each of the rest. Their own `"metadata"` field often names the purpose -
+both entries above are tagged `["map"]`.
+
+Most containers need none of this. Of three real ones: `GTM-MWKBJV` injects
+seven scripts of which the two above are the only page functionality,
+`GTM-KJZD388` injects eight and every one is ad or analytics, and
+`GTM-W4F8P893` injects no script at all.
 
 **Where you do let a container through, this resource stays out of its way.**
 Both wrap `dataLayer.push`, so a page's `eventCallback` used to be answered
