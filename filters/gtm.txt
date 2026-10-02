@@ -1,0 +1,44 @@
+! Title: gtm-rr - Google Tag Manager
+! Description: Replaces Google Tag Manager's container with a stub that keeps
+!              the API a page is written against and loads no tags.
+! Expires: 7 days
+! Homepage: https://github.com/ryanbr/gtm-rr
+!
+! These filters do nothing on their own: the resource they name has to be
+! installed through uBlock Origin's userResourcesLocation setting first. See the
+! README.
+
+! -----------------------------------------------------------------------------
+! The container is always asked for with a query - gtm.js on its own answers
+! 400 - and the query carries the two things the stub needs: id=GTM-XXXX, and
+! l=<name> where the page renamed its data layer. A redirect leaves the script
+! element's attributes alone, so the stub reads them off its own tag.
+! -----------------------------------------------------------------------------
+||googletagmanager.com/gtm.js$script,redirect=gtm-neutered.js
+
+! -----------------------------------------------------------------------------
+! Server-side tagging puts the same container on the site's own domain, where
+! the path is what identifies it rather than the host. One rule per site, since
+! the subdomain is the site's choice:
+!
+! ||sgtm.example.com/gtm.js$script,redirect=gtm-neutered.js
+! -----------------------------------------------------------------------------
+
+! -----------------------------------------------------------------------------
+! Deliberately left alone:
+!
+!   googletagmanager.com/gtag/js        a different loader, with its own API
+!   googletagmanager.com/ns.html        the <noscript> iframe, which uBO blocks
+!                                       without anything needing to answer
+!
+! gtag/js is not this resource's job: it installs gtag() and its own queue, and
+! a stub for it would have to answer a different contract. Blocking it is the
+! normal treatment, and this resource does not pretend to cover it.
+! -----------------------------------------------------------------------------
+
+! -----------------------------------------------------------------------------
+! Where a redirect cannot land, the scriptlet form covers it. With no script
+! element of its own to read, the stub falls back to the page's own tag:
+!
+! example.com##+js(gtm-neutered)
+! -----------------------------------------------------------------------------
