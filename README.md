@@ -45,8 +45,22 @@ These are pinned to a release, so an install stays where it is until you move
 it. `main` in place of `v1.0.0` follows the branch instead, which is useful for
 testing a fix and not for leaving in place.
 
-**For the first one that is the whole install.** uBO's default lists already
-send both loaders to `googletagmanager_gtm.js`:
+**Use the redirect and the scriptlet together.** `filters/gtm.txt` carries the
+scriptlet globally, and it is not a fallback you add after something breaks:
+whether a site's CSP will accept the redirect is not knowable in advance, and
+the two cover each other. Field-verified on trademe.co.nz, whose `script-src`
+lists neither `data:` nor `'unsafe-inline'`:
+
+| redirect | scriptlet | what happens |
+|---|---|---|
+| yes | no | CSP refuses the `data:` target. No container **and no stub** |
+| no | yes | scriptlet runs from a `blob:` URL, which is same-origin. Clean replacement |
+| yes | yes | whichever lands first does the work; the other sees the container id already registered and no-ops, saying `push=already container=kept` |
+
+On a site where the redirect does land, the scriptlet costs one storage read and
+a `MutationObserver` that finds nothing - it does not install twice.
+
+uBO's default lists already send both loaders to `googletagmanager_gtm.js`:
 
 ```
 ||googletagmanager.com/gtag/js$script,xhr,redirect=googletagmanager_gtm.js:5
@@ -55,7 +69,21 @@ send both loaders to `googletagmanager_gtm.js`:
 
 and a user resource replaces a built-in of the same name - uBO awaits its own
 `loadBuiltinResources`, then parses the `userResourcesLocation` text into the
-same map. So no filter of yours is needed on the sites those rules cover.
+same map. So no redirect rule of yours is needed on the sites those rules
+cover.
+
+One thing their lists do that is worth knowing about: **EasyPrivacy allowlists
+`gtm.js` on several hundred domains** -
+`@@||googletagmanager.com/gtm.js$domain=…|trademe.co.nz|jbhifi.co.nz|ticketmaster.*|…`
+- because blocking the container broke those sites. On those, the container
+loads for real. If the scriptlet is active as well, it installs first and the
+container then runs against this resource's objects instead of its own, reading
+undefined for its internals - which is visible in the console as a run of
+`missing=google_tag_manager.*` lines with `from=` pointing at
+`googletagmanager.com/gtm.js`. That is the signature of a site where their
+carve-out and this resource are fighting, and the choice is to defer to their
+carve-out (`#@#+js(googletagmanager_gtm)` for that domain) or to override it
+(`$important` on a redirect rule) and check the site still works.
 
 [`filters/gtm.txt`](filters/gtm.txt) carries only what uBO's rules cannot
 reach, which is server-side tagging on a site's own domain.

@@ -33,6 +33,20 @@ one. Confirmed on trademe.co.nz, whose `script-src` lists neither. That is also
 why the resource has a fallback that scans the page's own script tags for the
 container id instead of reading `document.currentScript`.
 
+**The full picture from the field, on trademe.co.nz** (CSP `script-src` with
+neither `data:` nor `'unsafe-inline'`, and an EasyPrivacy allowlist entry for
+its `gtm.js`), established over four loads:
+
+| setup | result |
+|---|---|
+| redirect only, allowlist active | container loads for real; no stub |
+| redirect + scriptlet, allowlist active | container loads **and** the stub installs first, so GTM's own `lo()` keeps ours and its internals read undefined - a run of `missing=google_tag_manager.*` with `from=` at `googletagmanager.com/gtm.js` |
+| redirect + scriptlet, allowlist overridden | clean: one summary line, no `missing=` at all |
+| redirect only, allowlist removed | `<script> source URI is not allowed in this document` - the redirect fires, its `data:` target is refused, nothing runs |
+
+So the redirect and the scriptlet are not alternatives, they cover each other,
+and the README says to install both.
+
 **A consequence of that blob URL, learned the hard way:** this resource's own
 stack frames carry a real source and page-like function names there -
 `get@blob:https://site/<uuid>:528:39` is the watching proxy's own get trap - so
