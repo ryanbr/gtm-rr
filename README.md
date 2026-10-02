@@ -39,18 +39,24 @@ This resource answers all three, and nothing else.
 uBlock Origin fetches user resources from the URLs in its hidden setting
 `userResourcesLocation` (Settings > Advanced > click `advanced settings`):
 
+It is one setting on **one line**, the name and then every URL you want,
+separated by spaces:
+
 ```
-https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.0/dist/googletagmanager_gtm.js
-https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.0/dist/ga-optout.js
-https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.0/dist/gtm-tag.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.0/dist/ga-optout.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.0/dist/gtm-tag.js
 ```
 
-The setting takes several whitespace-separated URLs, and they go on **one
-line**: uBO reads a hidden setting as a name and then the rest of that line
-(`/^\s*(\S+)\s+(.+)$/`), so a second `userResourcesLocation` line replaces the
-first rather than adding to it. One fetch per URL, no limit on how many, and a
-URL that 404s or comes back empty is skipped in silence - no error anywhere,
-which looks exactly like the resource not working.
+Those are the three resources: `googletagmanager_gtm.js`, `ga-optout.js` and
+`gtm-tag.js`.
+
+**One URL per line does not work, and fails quietly.** uBO reads a hidden
+setting as a name and then the rest of *that* line (`/^\s*(\S+)\s+(.+)$/`), and
+a later line replaces an earlier one instead of adding to it - so repeating
+`userResourcesLocation` on three lines leaves you with whichever came last,
+and three bare URL lines leave the setting unset entirely. Either way the
+resources that did not load say nothing at all. One fetch per URL, no limit on
+how many, and a URL that 404s or comes back empty is skipped in the same
+silence.
 
 Changes to a file land after a filter-list update or _Purge all caches_, not
 straight away: the parsed set is cached in a selfie, invalidated on
