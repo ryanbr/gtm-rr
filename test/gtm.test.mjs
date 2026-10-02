@@ -177,12 +177,16 @@ describe('googletagmanager_gtm', ( ) => {
         'window.google_tag_manager=window.google_tag_manager||{};' +
         "var d=window.google_tag_manager['dataLayer']=" +
         "  window.google_tag_manager['dataLayer']||{};" +
+        // Theirs counts itself a subscriber, then wraps the push, then reads
+        // the array it found - bind() maps what is already there into its own
+        // queue, so a callback pushed before it arrived is answered too.
         'd.subscribers=(d.subscribers||0)+1;' +
+        'var answer=function(o){' +
+        "  if(o&&typeof o.eventCallback==='function'){" +
+        '    setTimeout(o.eventCallback,1) } };' +
         'c.push=function(){var i=[].slice.call(arguments,0);' +
-        '  i.forEach(function(o){' +
-        "    if(o&&typeof o.eventCallback==='function'){" +
-        '      setTimeout(o.eventCallback,1) } });' +
-        '  return e.apply(c,i)};' +
+        '  i.forEach(answer); return e.apply(c,i)};' +
+        'c.slice(0).forEach(answer);' +
         'window.google_tag_manager["' + id + '"]=' +
         '  window.google_tag_manager["' + id + '"]||{theirs:true}})();';
 
@@ -217,6 +221,98 @@ describe('googletagmanager_gtm', ( ) => {
             assert.equal(fired, 1, 'fired ' + fired + ' times');
         });
     }
+
+    it('stands aside once a real container binds', async ( ) => {
+        let out;
+        const dom = new JSDOM(fixture, {
+            runScripts: 'outside-only', url: URL,
+        });
+        const w = dom.window;
+        out = lines(w);
+        snippet()(w);
+        w.eval(neutered);
+        const watched = w.google_tag_manager;
+        // Before: the registry is watched, so a read of something this does
+        // not provide is named.
+        w.google_tag_manager.tcf;
+        assert.ok(out.some(l => l.includes(' missing=google_tag_manager.tcf')),
+            out.join(' | '));
+        w.eval(realContainer(ID));
+        // The next push is where it notices their bind.
+        w.dataLayer.push({ event: 'anything' });
+        await settle(10);
+        assert.ok(out.some(l => l.includes(' yielded=live-container')),
+            out.join(' | '));
+        // The proxy is off: the registry is the object itself again, and
+        // their get-or-create reads are no longer narrated.
+        assert.notEqual(w.google_tag_manager, watched);
+        const before_ = out.length;
+        w.google_tag_manager.somethingElseOfTheirs;
+        assert.equal(out.length, before_, out.slice(before_).join(' | '));
+        // What the page relies on is untouched: their container object, the
+        // data layer, and the id this registered.
+        assert.ok(w.google_tag_manager[ID]);
+        assert.equal(typeof w.dataLayer.push, 'function');
+    });
+
+    it('does not stand aside with no container but its own', async ( ) => {
+        let out;
+        const w = boot({ before: w_ => { out = lines(w_); snippet()(w_); } });
+        w.dataLayer.push({ event: 'anything' });
+        await settle(10);
+        assert.equal(out.some(l => l.includes(' yielded=')), false,
+            out.join(' | '));
+        // Still watching, still answering.
+        w.google_tag_manager.tcf;
+        assert.ok(out.some(l => l.includes(' missing=google_tag_manager.tcf')),
+            out.join(' | '));
+    });
+
+    it('leaves a callback alone if a container binds before the tick',
+    async ( ) => {
+        // The window the yield cannot cover: the page pushes, and a real
+        // container boots and binds before the next tick, when this would
+        // have answered. Their bind() counts itself a subscriber first and
+        // wraps the push second, so by the time they could answer twice the
+        // count has already moved - which is what the check in the callback
+        // path reads.
+        const dom = new JSDOM(fixture, {
+            runScripts: 'outside-only', url: URL,
+        });
+        const w = dom.window;
+        w.console.info = ( ) => {};
+        snippet()(w);
+        w.eval(neutered);
+        let fired = 0;
+        w.dataLayer.push({
+            event: 'formSubmit',
+            eventCallback: ( ) => { fired += 1; },
+        });
+        // Still the same turn: nothing has answered yet.
+        assert.equal(fired, 0);
+        w.eval(realContainer(ID));
+        await settle(40);
+        // Theirs answered it - the item was in the array before they wrapped,
+        // so they pick it up from the backlog - and this did not answer it
+        // again.
+        assert.equal(fired, 1, 'fired ' + fired + ' times');
+    });
+
+    it('answers a callback once when anything else answers it too',
+    async ( ) => {
+        // Not every other caller is a container. The guard is their own
+        // contract - Go() runs the list once and empties it - so whoever gets
+        // there first wins, whatever the other caller is.
+        const w = boot({ before: snippet() });
+        let fired = 0;
+        const item = { event: 'x', eventCallback: ( ) => { fired += 1; } };
+        w.dataLayer.push(item);
+        // Something else on the page calls the same callback - a debug
+        // wrapper, a second tag manager, the page itself.
+        item.eventCallback();
+        await settle(20);
+        assert.equal(fired, 1, 'fired ' + fired + ' times');
+    });
 
     it('runs it once, however long the eventTimeout', async ( ) => {
         const w = boot({ before: snippet() });

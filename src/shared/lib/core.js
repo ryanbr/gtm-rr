@@ -496,6 +496,12 @@ function consentRRGtmCore(options) {
             };
         };
 
+        // What the subscriber count stood at once this resource had added
+        // itself, so a later bind by something else is visible. Declared here
+        // rather than beside state(), because the backlog drain in hook()
+        // reaches the yield check before that point.
+        let subscribed = 0;
+
         const container = watch(
             model(), 'dataLayer',
             [ 'name', 'get', 'set', 'reset' ]
@@ -661,7 +667,63 @@ function consentRRGtmCore(options) {
             }
         };
 
+        // Whether a real container has bound itself to this data layer since,
+        // which their own bookkeeping says: bind() does
+        //   d.subscribers = (d.subscribers || 0) + 1
+        // on the entry named after the layer.
+        const liveContainer = ( ) => {
+            try {
+                const live = registry[layer];
+                if ( live === null || typeof live !== 'object' ) { return false; }
+                return live.subscribers > subscribed;
+            } catch(ex) {
+            }
+            return false;
+        };
+
+        // On a site where a real container runs as well as this - an
+        // allowlisted one, or one that has to be allowed because the
+        // container is the page's loader - get out of its way.
+        //
+        // What a yield cannot do, so the next reader does not expect it: hand
+        // the container object back. This does not have theirs. Their lo() is
+        // get-or-keep and kept this one the moment they booted, and nothing
+        // reads it again for them to replace.
+        //
+        // What it does:
+        //   the watching proxy comes off the registry, so their reads are
+        //   direct and stop being narrated. Their ho() is get-or-create, so
+        //   those reads were never broken by the proxy - but on a page with a
+        //   live container every feature it creates is a console line and a
+        //   trap on a hot path, for nothing.
+        //   the anti-flicker check stops, since a live container ends its
+        //   own.
+        //   and a page's callback is already left to them, above.
+        let yielded = false;
+
+        const yieldTo = ( ) => {
+            if ( yielded ) { return true; }
+            if ( liveContainer() === false ) { return false; }
+            yielded = true;
+            try {
+                if ( w.google_tag_manager !== registry ) {
+                    w.google_tag_manager = registry;
+                }
+            } catch(ex) {
+            }
+            try {
+                w.console.info(
+                    '[gtm-rr] ' + options.name + ' ' + VERSION +
+                    ' yielded=live-container' +
+                    ' id=' + (id !== '' ? id : 'unknown')
+                );
+            } catch(ex) {
+            }
+            return true;
+        };
+
         const handle = item => {
+            if ( yieldTo() ) { return; }
             unhide();
             absorb(item);
             callBack(item);
@@ -750,13 +812,13 @@ function consentRRGtmCore(options) {
         const entry = already ? registry[layer] : state();
         // What the count stood at once this resource had added itself, so a
         // later bind by something else is visible.
-        let subscribed = 0;
         try {
-            subscribed = entry !== null && typeof entry === 'object'
-                ? entry.subscribers
-                : 0;
+            if ( entry !== null && typeof entry === 'object' ) {
+                subscribed = entry.subscribers;
+            }
         } catch(ex) {
         }
+
 
         // Their own entry carries more than these three - pruned, and whatever a
         // feature of theirs parks on it - so a read of something else is worth a

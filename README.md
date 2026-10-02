@@ -35,8 +35,8 @@ uBlock Origin fetches user resources from the URLs in its hidden setting
 `userResourcesLocation` (Settings > Advanced > click `advanced settings`):
 
 ```
-https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.1.2/dist/googletagmanager_gtm.js
-https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.1.2/dist/ga-optout.js
+https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.1.3/dist/googletagmanager_gtm.js
+https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.1.3/dist/ga-optout.js
 ```
 
 The setting takes several whitespace-separated URLs.
@@ -325,11 +325,20 @@ it), and where a real container has bound itself this does not answer at all:
 their `bind()` does `d.subscribers = (d.subscribers || 0) + 1`, so one more
 subscriber than this accounted for means something live is answering.
 
-One effect remains: on such a site the scriptlet installs the container object
-first, so their `lo()` get-or-keep adopts it and their internals read
-undefined. In the console that is a run of `missing=google_tag_manager.*` lines
-with `from=` at `googletagmanager.com/gtm.js`, which is the signature to
-recognise.
+**And once a real container binds, this stands aside.** Their `bind()` does
+`d.subscribers = (d.subscribers || 0) + 1`, so one more subscriber than this
+resource accounted for means something live is answering: the watching `Proxy`
+comes off the registry so their reads are direct and stop being narrated, the
+anti-flicker check stops, and the page's callbacks are left to them. One line
+says so: `yielded=live-container`.
+
+What it does *not* do is hand the container object back - it does not have
+theirs. Their `lo()` is get-or-keep and adopted this one when they booted, and
+nothing re-reads it for a swap to take. Their own features are unaffected by
+that, though: `ho()` is get-or-create, so a read through the watcher returned
+undefined and they created the feature as normal. The run of
+`missing=google_tag_manager.*` lines you see before the yield is this resource
+narrating their boot, not breaking it.
 
 ## Why an opt-out as well as a stub
 

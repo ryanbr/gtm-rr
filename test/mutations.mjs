@@ -76,6 +76,25 @@ export default [
         to: '                    return callback.apply(this, arguments);',
     },
 
+    {
+        label: 'never stands aside for a live container',
+        file: CORE,
+        from: '            if ( yieldTo() ) { return; }',
+        to: '',
+    },
+    {
+        label: 'stands aside with no live container',
+        file: CORE,
+        from: '            if ( liveContainer() === false ) { return false; }',
+        to: '',
+    },
+    {
+        label: 'yields but leaves the proxy on',
+        file: CORE,
+        from: '                if ( w.google_tag_manager !== registry ) {\n                    w.google_tag_manager = registry;\n                }',
+        to: '',
+    },
+
     // The registry and the container object.
     {
         label: 'bootstrap left at zero',
