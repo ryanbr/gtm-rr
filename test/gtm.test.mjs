@@ -19,7 +19,7 @@ const ID = 'GTM-KJZD388';
 let neutered;
 
 before(async ( ) => {
-    neutered = (await loadResources()).get('gtm-neutered.js');
+    neutered = (await loadResources()).get('googletagmanager_gtm.js');
 });
 
 const plain = value => JSON.parse(JSON.stringify(value));
@@ -53,7 +53,7 @@ const lines = w => {
 
 /******************************************************************************/
 
-describe('gtm-neutered', ( ) => {
+describe('googletagmanager_gtm', ( ) => {
     it('ships as one resource, in the format uBO parses', ( ) => {
         assert.equal(typeof neutered, 'string');
         assert.ok(neutered.length > 0);
@@ -108,6 +108,10 @@ describe('gtm-neutered', ( ) => {
         }
         // Their macro-resolver map, which a tag's output refers to by name.
         assert.deepEqual(plain(w.google_tag_manager.rm), {});
+        // The marker that makes a second run a no-op is kept off the key set
+        // above, because theirs carries no such field.
+        assert.equal(Object.keys(container).includes('consentRRGtm'), false);
+        assert.equal(container.consentRRGtm, versions.gtm);
     });
 
     it('answers their model, including a dotted path', ( ) => {
@@ -293,6 +297,162 @@ describe('gtm-neutered', ( ) => {
         assert.equal(typeof w.dataLayer.push, 'function');
     });
 
+    it('stands in for the other loader off the same name', async ( ) => {
+        // uBO's own lists send gtag/js to googletagmanager_gtm.js as well, so
+        // this resource has to answer that contract too - and which one it is
+        // standing in for comes off the script's own src.
+        let out;
+        const html = '<!doctype html><html><head><script async src=' +
+            '"https://www.googletagmanager.com/gtag/js?id=G-KQ9NC85WD9">' +
+            '</scr' + 'ipt></head><body><p>x</p></body></html>';
+        const w = boot({
+            html,
+            before: w_ => {
+                out = lines(w_);
+                w_.eval('window.dataLayer = window.dataLayer || [];' +
+                    'window.gtag = function gtag(){' +
+                    ' window.dataLayer.push(arguments); };' +
+                    'window.gtag("js", new Date());' +
+                    'window.gtag("config", "G-KQ9NC85WD9");');
+            },
+        });
+        assert.ok(out[0].includes(' loader=/gtag/js'), out[0]);
+        const container = w.google_tag_manager['G-KQ9NC85WD9'];
+        // Their gtag/js build of RU() has neither of the container's two
+        // html handlers.
+        assert.deepEqual(Object.keys(container).sort(),
+            [ 'bootstrap', 'callback', 'dataLayer' ]);
+        // And the command only that loader has, which a page waits on.
+        const seen = [];
+        w.gtag('get', 'G-KQ9NC85WD9', 'client_id', v => { seen.push(v); });
+        assert.deepEqual(seen, []);
+        await settle(10);
+        // Answered, and with nothing: there is no client id, and inventing
+        // one would be creating a tracking id here.
+        assert.deepEqual(seen, [ undefined ]);
+        assert.ok(out.some(l => l.includes(' get=client_id answered=undefined')),
+            out.join(' | '));
+        // The page's own gtag is left alone: neither loader defines one.
+        assert.equal(w.gtag.name, 'gtag');
+    });
+
+    it('puts the container two fields on the container loader only', ( ) => {
+        const w = boot({ before: snippet() });
+        assert.equal(typeof w.google_tag_manager[ID].onHtmlSuccess, 'function');
+        assert.equal(typeof w.google_tag_manager[ID].onHtmlFailure, 'function');
+    });
+
+    it('serves both loaders on one page, each with its own surface',
+    async ( ) => {
+        const html = '<!doctype html><html><head>' +
+            '<script src="https://www.googletagmanager.com/gtm.js?id=' + ID +
+            '"></scr' + 'ipt></head><body><p>x</p></body></html>';
+        const w = boot({ html, before: snippet() });
+        // The second script is the other loader, and the resource runs again
+        // for it - the id it has not seen before is what makes that run do
+        // something, which is their own get-or-create.
+        w.document.head.insertAdjacentHTML('beforeend',
+            '<script src="https://www.googletagmanager.com/gtag/js?id=G-SECOND0001">' +
+            '</scr' + 'ipt>');
+        w.eval(neutered);
+        await settle(10);
+        assert.equal(typeof w.google_tag_manager[ID].onHtmlSuccess, 'function');
+        assert.ok(w.google_tag_manager['G-SECOND0001'] === undefined ||
+            w.google_tag_manager['G-SECOND0001'].onHtmlSuccess === undefined);
+        // One data layer, and a subscriber for each run that registered.
+        assert.ok(w.google_tag_manager.dataLayer.subscribers >= 1);
+    });
+
+    it('ends the anti-flicker hiding their snippet parks on the layer',
+    async ( ) => {
+        let out;
+        const w = boot({
+            before: w_ => {
+                out = lines(w_);
+                // Google's own anti-flicker snippet, as it ships: a class on
+                // the document element and the undo parked on the data layer.
+                w_.eval(
+                    'document.documentElement.className += " async-hide";' +
+                    'window.dataLayer = window.dataLayer || [];' +
+                    'window.dataLayer.hide = { start: 1, timeout: 4000,' +
+                    ' "' + ID + '": true,' +
+                    ' end: function(){ document.documentElement.className =' +
+                    '  document.documentElement.className' +
+                    '    .replace(/ ?async-hide/, ""); } };'
+                );
+                snippet()(w_);
+            },
+        });
+        // Their own code clears its entry and, where no other container is
+        // still expected, ends the hiding and drops the function.
+        assert.equal(w.dataLayer.hide[ID], false);
+        assert.equal(w.dataLayer.hide.end, null);
+        assert.equal(w.document.documentElement.className.includes('async-hide'),
+            false);
+        assert.ok(out[0].includes(' hide=ended'), out[0]);
+    });
+
+    it('leaves the hiding to a container that is still expected', ( ) => {
+        let out;
+        const w = boot({
+            before: w_ => {
+                out = lines(w_);
+                w_.eval(
+                    'document.documentElement.className += " async-hide";' +
+                    'window.dataLayer = window.dataLayer || [];' +
+                    'window.dataLayer.hide = { start: 1, timeout: 4000,' +
+                    ' "' + ID + '": true, "GTM-OTHER11": true,' +
+                    ' end: function(){ window.ended = true; } };'
+                );
+                snippet()(w_);
+            },
+        });
+        // Theirs only ends it when nothing else in the map is still true.
+        assert.equal(w.dataLayer.hide[ID], false);
+        assert.equal(w.ended, undefined);
+        assert.equal(typeof w.dataLayer.hide.end, 'function');
+        assert.ok(out[0].includes(' hide=waiting'), out[0]);
+    });
+
+    it('does not touch a hiding that is not this container own', ( ) => {
+        let out;
+        const w = boot({
+            before: w_ => {
+                out = lines(w_);
+                w_.eval('window.dataLayer = window.dataLayer || [];' +
+                    'window.dataLayer.hide = { "GTM-SOMEONEELSE": true,' +
+                    ' end: function(){ window.ended = true; } };');
+                snippet()(w_);
+            },
+        });
+        assert.equal(w.ended, undefined);
+        assert.equal(w.dataLayer.hide['GTM-SOMEONEELSE'], true);
+        assert.ok(out[0].includes(' hide=theirs'), out[0]);
+    });
+
+    it('keeps the ga noop uBO own resource puts up', ( ) => {
+        const w = boot({ before: snippet() });
+        // Standing in front of theirs means not losing what theirs did: a
+        // page calling ga() where analytics.js was blocked without a stub
+        // would throw.
+        assert.equal(typeof w.ga, 'function');
+        assert.equal(w.ga('send', 'pageview'), undefined);
+    });
+
+    it('leaves a better ga stub alone', ( ) => {
+        const w = boot({
+            before: w_ => {
+                w_.eval('window.ga = function(){ window.gaCalls =' +
+                    ' (window.gaCalls || 0) + 1; };');
+                snippet()(w_);
+            },
+        });
+        // uBO's analytics surrogate installs one that honours hitCallback,
+        // and it is the better of the two.
+        w.ga('send');
+        assert.equal(w.gaCalls, 1);
+    });
+
     it('does nothing the second time it is injected', async ( ) => {
         const w = boot({ before: snippet() });
         await settle(60);
@@ -336,8 +496,9 @@ describe('gtm-neutered', ( ) => {
         assert.equal(out.length, 1);
         assert.equal(
             out[0],
-            '[gtm-rr] gtm-neutered ' + versions.gtm +
-            ' id=' + ID + ' layer=dataLayer push=hooked container=installed'
+            '[gtm-rr] googletagmanager_gtm ' + versions.gtm +
+            ' loader=/gtm.js id=' + ID +
+            ' layer=dataLayer push=hooked container=installed hide=absent'
         );
     });
 });
@@ -345,20 +506,29 @@ describe('gtm-neutered', ( ) => {
 /******************************************************************************/
 
 describe('filters, gtm', ( ) => {
-    it('redirects the container, by the name the resource ships under', ( ) => {
-        assert.match(
-            filtersText,
-            /\|\|googletagmanager\.com\/gtm\.js\$script,redirect=gtm-neutered\.js/
-        );
-        // A redirect takes the full name; the scriptlet form takes none.
-        assert.match(filtersText, /\+js\(gtm-neutered\)/);
-        assert.equal(filtersText.includes('+js(gtm-neutered.js)'), false);
+    it('ships under uBO own resource name, which replaces the built-in',
+    async ( ) => {
+        const resources = await loadResources();
+        // The name is the point: uBO's default lists already redirect both
+        // loaders to it, and a user resource of the same name replaces the
+        // built-in.
+        assert.ok(resources.has('googletagmanager_gtm.js'),
+            Array.from(resources.keys()).join(','));
+        assert.match(filtersText, /redirect=googletagmanager_gtm\.js:5/);
+        assert.match(filtersText, /A user resource replaces a built-in/);
     });
 
-    it('leaves gtag and the noscript frame alone', ( ) => {
-        // Both are deliberate, and the list says so rather than carrying a
-        // rule that would need a different contract answered.
-        assert.equal(/redirect=[a-z-]*gtag/.test(filtersText), false);
-        assert.match(filtersText, /gtag\/js\s+a different loader/);
+    it('carries no rule for the sites uBO own lists already cover', ( ) => {
+        // Nothing to add there, so nothing is added: the only rules here are
+        // the first-party ones uBO's cannot reach, and they are examples.
+        assert.equal(
+            /^\|\|googletagmanager\.com/m.test(filtersText),
+            false
+        );
+        assert.match(filtersText, /sgtm\.example\.com\/gtm\.js/);
+    });
+
+    it('sends the unreachable cases to the opt-out instead', ( ) => {
+        assert.match(filtersText, /Use\s*\n! ga-optout instead/);
     });
 });

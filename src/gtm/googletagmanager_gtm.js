@@ -4,9 +4,9 @@
     Copyright (C) 2026-present ryanbr
     SPDX-License-Identifier: GPL-3.0-or-later
 
-    Stands in for googletagmanager.com/gtm.js: the container loads nothing,
-    fires no tag and asks for nothing, and the page keeps the API its own code
-    was written against.
+    Stands in for both of Google's loaders - googletagmanager.com/gtm.js and
+    /gtag/js - and ships under uBlock Origin's own resource name, which a user
+    resource of the same name replaces.
 
 */
 

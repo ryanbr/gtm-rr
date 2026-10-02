@@ -1,44 +1,51 @@
 ! Title: gtm-rr - Google Tag Manager
-! Description: Replaces Google Tag Manager's container with a stub that keeps
-!              the API a page is written against and loads no tags.
+! Description: Notes for googletagmanager_gtm.js, which replaces uBlock
+!              Origin's resource of the same name.
 ! Expires: 7 days
 ! Homepage: https://github.com/ryanbr/gtm-rr
 !
-! These filters do nothing on their own: the resource they name has to be
-! installed through uBlock Origin's userResourcesLocation setting first. See the
-! README.
+! On the sites uBO's own lists already cover, this list is not needed at all.
+! Installing the resource is the whole of it.
 
 ! -----------------------------------------------------------------------------
-! The container is always asked for with a query - gtm.js on its own answers
-! 400 - and the query carries the two things the stub needs: id=GTM-XXXX, and
-! l=<name> where the page renamed its data layer. A redirect leaves the script
-! element's attributes alone, so the stub reads them off its own tag.
-! -----------------------------------------------------------------------------
-||googletagmanager.com/gtm.js$script,redirect=gtm-neutered.js
-
-! -----------------------------------------------------------------------------
-! Server-side tagging puts the same container on the site's own domain, where
-! the path is what identifies it rather than the host. One rule per site, since
-! the subdomain is the site's choice:
+! uBO ships a resource called googletagmanager_gtm.js, and its default lists
+! send both of Google's loaders to that name:
 !
-! ||sgtm.example.com/gtm.js$script,redirect=gtm-neutered.js
+!   privacy.txt  ||googletagmanager.com/gtag/js$script,xhr,
+!                  redirect=googletagmanager_gtm.js:5
+!   privacy.txt  ||googletagmanager.com/gtm.js$script,
+!                  redirect=googletagmanager_gtm.js:5,domain=~nerc.com
+!
+! A user resource replaces a built-in of the same name - uBO awaits its own
+! loadBuiltinResources first and parses the userResourcesLocation text after it
+! into the same map - so installing ours under that name is all that is needed
+! for those rules to serve it. No filter below is required for that.
+! -----------------------------------------------------------------------------
+
+! -----------------------------------------------------------------------------
+! Server-side tagging puts the same loaders on the site's own domain, where
+! uBO's rules do not reach, and the path is what identifies them. One rule per
+! site, since the subdomain is the site's choice:
+!
+! ||sgtm.example.com/gtm.js$script,redirect=googletagmanager_gtm.js
+! ||metrics.example.com/gtag/js$script,redirect=googletagmanager_gtm.js
+!
+! The resource reads the container id and the data layer's name out of the
+! query either way, and which loader it is standing in for out of the path.
+! -----------------------------------------------------------------------------
+
+! -----------------------------------------------------------------------------
+! Where a redirect cannot land at all - an inlined bundle, or a path a rule
+! cannot match - the resource has nothing to stand in front of, and the
+! scriptlet form would be answering for a loader that is still running. Use
+! ga-optout instead, which turns on Google's own opt-out and leaves the bundle
+! to disable itself. See filters/ga.txt.
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
 ! Deliberately left alone:
 !
-!   googletagmanager.com/gtag/js        a different loader, with its own API
-!   googletagmanager.com/ns.html        the <noscript> iframe, which uBO blocks
-!                                       without anything needing to answer
-!
-! gtag/js is not this resource's job: it installs gtag() and its own queue, and
-! a stub for it would have to answer a different contract. Blocking it is the
-! normal treatment, and this resource does not pretend to cover it.
-! -----------------------------------------------------------------------------
-
-! -----------------------------------------------------------------------------
-! Where a redirect cannot land, the scriptlet form covers it. With no script
-! element of its own to read, the stub falls back to the page's own tag:
-!
-! example.com##+js(gtm-neutered)
+!   googletagmanager.com/ns.html        the <noscript> iframe, which nothing
+!                                       in the page reads, so blocking it is
+!                                       the whole treatment
 ! -----------------------------------------------------------------------------
