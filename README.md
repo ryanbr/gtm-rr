@@ -45,7 +45,18 @@ https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.0/dist/ga-optout.js
 https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.0/dist/gtm-tag.js
 ```
 
-The setting takes several whitespace-separated URLs.
+The setting takes several whitespace-separated URLs, and they go on **one
+line**: uBO reads a hidden setting as a name and then the rest of that line
+(`/^\s*(\S+)\s+(.+)$/`), so a second `userResourcesLocation` line replaces the
+first rather than adding to it. One fetch per URL, no limit on how many, and a
+URL that 404s or comes back empty is skipped in silence - no error anywhere,
+which looks exactly like the resource not working.
+
+Changes to a file land after a filter-list update or _Purge all caches_, not
+straight away: the parsed set is cached in a selfie, invalidated on
+`after-assets-updated` while this setting is in use. The same mechanism means a
+`main` URL can change under you at the next list update, which is the other
+reason to pin a tag.
 
 These are pinned to a release, so an install stays where it is until you move
 it. `main` in place of `v1.2.0` follows the branch instead, which is useful for
