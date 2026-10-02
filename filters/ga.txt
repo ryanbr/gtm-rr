@@ -1,0 +1,39 @@
+! Title: gtm-rr - Google Analytics opt-out
+! Description: Turns on Google's own opt-out switches, for the bundles a
+!              redirect cannot reach.
+! Expires: 7 days
+! Homepage: https://github.com/ryanbr/gtm-rr
+!
+! These filters do nothing on their own: the resource they name has to be
+! installed through uBlock Origin's userResourcesLocation setting first. See the
+! README.
+
+! -----------------------------------------------------------------------------
+! This one replaces nothing, so it is a scriptlet and not a redirect: it has to
+! run alongside a real Google bundle, before that bundle sends anything.
+!
+! Use it where blocking is not an option - the loader is served from the site's
+! own domain, or from a proxied path, or the bundle is inlined in the page - so
+! there is no third-party URL to match. The page keeps a real, working Google
+! bundle that refuses to send, by its own check.
+!
+! example.com##+js(ga-optout)
+! -----------------------------------------------------------------------------
+
+! -----------------------------------------------------------------------------
+! Applying it everywhere is a decision, not a default, so this list does not
+! make it. It costs one function, one attribute and a flag per id on every
+! page, and it is only of use where a Google bundle actually runs - which, with
+! the usual lists active, is the pages that got through them.
+!
+! To take that decision:
+!
+! *##+js(ga-optout)
+! -----------------------------------------------------------------------------
+
+! -----------------------------------------------------------------------------
+! Where the loader IS a matchable third-party URL, a redirect is the better
+! treatment: nothing is fetched at all, rather than fetched and told to be
+! quiet. See filters/gtm.txt for the container, and uBO's own
+! google-analytics_analytics.js for the classic analytics.js.
+! -----------------------------------------------------------------------------

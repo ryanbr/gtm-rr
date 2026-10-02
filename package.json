@@ -11,7 +11,8 @@
     "README.md"
   ],
   "resourceVersions": {
-    "gtm": "1.0.0"
+    "gtm": "1.0.0",
+    "ga": "1.0.0"
   },
   "scripts": {
     "build": "node tools/build.mjs",
