@@ -17,6 +17,12 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/build.yml'
+      # The build reads these: it refuses to run if an install URL in one
+      # names a version other than package.json's. A change here can fail the
+      # build, so it has to be able to run the build.
+      - 'README.md'
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
   workflow_dispatch:
 
 permissions:
