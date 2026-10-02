@@ -450,6 +450,19 @@ export default [
         to: '        try {\n            if ( true ) {',
     },
 
+    {
+        label: 'debug: our own frames are named as the caller',
+        file: CORE,
+        from: "                    if ( mine !== '' && sourceOf(frame) === mine ) { continue; }",
+        to: '',
+    },
+    {
+        label: 'debug: the caller source is read off the wrong frame',
+        file: CORE,
+        from: '                const mine = sourceOf(frames[0]);',
+        to: "                const mine = '';",
+    },
+
     // The opt-out, which is a different job in the same repo.
     {
         label: 'optout: ioo answers false',

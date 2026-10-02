@@ -26,10 +26,19 @@ resource runs there at all - seen on trademe.co.nz as
 resources come from an extension URL and a page's CSP cannot refuse those, so
 shadowing one of theirs with a user resource is a downgrade on those sites: the
 request is still blocked, but the page gets no stub where theirs would have
-run. The scriptlet form (`##+js(name)`) is injected rather than fetched and has
-no URI to object to, which is the per-site way round it - and the reason the
-resource has a fallback that scans the page's own script tags for the container
-id instead of reading `document.currentScript`.
+run. The scriptlet form (`##+js(name)`) is the way round it, and it works because
+uBO injects a scriptlet from a `blob:` URL belonging to the page: a blob URL is
+same-origin, so a `script-src 'self'` permits it where it refuses a `data:`
+one. Confirmed on trademe.co.nz, whose `script-src` lists neither. That is also
+why the resource has a fallback that scans the page's own script tags for the
+container id instead of reading `document.currentScript`.
+
+**A consequence of that blob URL, learned the hard way:** this resource's own
+stack frames carry a real source and page-like function names there -
+`get@blob:https://site/<uuid>:528:39` is the watching proxy's own get trap - so
+anything that walks a stack to find *the page's* frame has to drop frames by
+**source**, never by function name. That was got wrong twice before the field
+showed it.
 
 `+js(gtm-neutered)` takes no `.js`; `redirect=gtm-neutered.js` takes the full
 name. A wrong token injects nothing and says nothing.

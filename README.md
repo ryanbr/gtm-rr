@@ -35,8 +35,8 @@ uBlock Origin fetches user resources from the URLs in its hidden setting
 `userResourcesLocation` (Settings > Advanced > click `advanced settings`):
 
 ```
-https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.1.0/dist/googletagmanager_gtm.js
-https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.1.0/dist/ga-optout.js
+https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.1.1/dist/googletagmanager_gtm.js
+https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.1.1/dist/ga-optout.js
 ```
 
 The setting takes several whitespace-separated URLs.
@@ -144,6 +144,11 @@ globally, since a CSP is not something a list can enumerate:
 ```
 *##+js(googletagmanager_gtm)
 ```
+
+It works because uBO injects a scriptlet from a `blob:` URL belonging to the
+page, and a blob URL is same-origin - so a `script-src 'self'` allows it where
+it refuses a `data:` one. Confirmed on trademe.co.nz, whose `script-src` lists
+neither `data:` nor `'unsafe-inline'`.
 
 That is safe to apply everywhere because the resource does nothing until there
 is something to stand in for. Injected at `document_start` the page has not

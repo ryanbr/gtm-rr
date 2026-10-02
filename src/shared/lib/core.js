@@ -288,39 +288,46 @@ function consentRRGtmCore(options) {
             return 'unreadable';
         };
 
-        // Which script asked, which is the part a report needs to be chased at
-        // all. Everything of this resource's own is dropped first: its functions
-        // by name, since they are all here; the frame it runs from, which served
-        // as a redirect is a data: URI and injected as a scriptlet has no url;
-        // and anything a browser could not place. What is left is the page's.
+        // Which script asked, which is the part a report needs to be chased
+        // at all - and this resource's own frames have to come off the stack
+        // first, by source rather than by name. uBO injects a scriptlet from
+        // a blob: URL belonging to the page, so in the field these frames
+        // read
+        //   get@blob:https://site/<uuid>:528:39
+        // with names a page could just as well have used. Listing our own
+        // function names and dropping those was wrong twice - first for
+        // caller itself, then for the proxy's get trap - so what is dropped
+        // is every leading frame from the same source as this function,
+        // whatever it is called and whatever scheme it came from.
         //
-        // A browser gives the page's own script and line. jsdom runs everything
-        // through eval and places none of it, and answers unknown - which is
-        // honest about what it knows rather than pointing at the wrong thing.
-        const OURS = [
-            'caller', 'report', 'snippet', 'handle', 'absorb', 'callBack',
-            'unhide', 'wrapped', 'command', 'watch', 'consentRRGtm',
-        ];
+        // jsdom evals everything from one file, so every frame shares a
+        // source there and the answer is unknown: honest about what it knows
+        // rather than pointing at the wrong thing.
+        const sourceOf = frame => {
+            // "at name (src:1:2)" and "name@src:1:2" are the two shapes.
+            let match = /\(([^()]*)\)\s*$/.exec(frame);
+            if ( match === null ) { match = /@(.*)$/.exec(frame); }
+            if ( match === null ) { return ''; }
+            return match[1].replace(/:\d+:\d+$/, '');
+        };
 
         const caller = ( ) => {
             try {
+                const frames = [];
                 const stack = String(new w.Error().stack || '');
                 for ( const line of stack.split('\n') ) {
                     const trimmed = line.trim();
                     if ( trimmed === '' ) { continue; }
                     if ( trimmed.startsWith('Error') ) { continue; }
-                    if ( trimmed.indexOf('data:') !== -1 ) { continue; }
-                    if ( trimmed.indexOf('<anonymous>') !== -1 ) { continue; }
-                    if ( trimmed.indexOf('Proxy') !== -1 ) { continue; }
-                    let own = false;
-                    for ( const name of OURS ) {
-                        // "at caller (...)" and "caller@..." are the two shapes.
-                        if ( trimmed.indexOf('at ' + name + ' ') === 0 ) { own = true; }
-                        if ( trimmed.indexOf(name + '@') === 0 ) { own = true; }
-                    }
-                    if ( own ) { continue; }
-                    if ( trimmed.length <= 120 ) { return trimmed; }
-                    return trimmed.slice(0, 120) + '...';
+                    frames.push(trimmed);
+                }
+                if ( frames.length === 0 ) { return 'unknown'; }
+                const mine = sourceOf(frames[0]);
+                for ( const frame of frames ) {
+                    if ( mine !== '' && sourceOf(frame) === mine ) { continue; }
+                    if ( frame.indexOf('<anonymous>') !== -1 ) { continue; }
+                    if ( frame.length <= 120 ) { return frame; }
+                    return frame.slice(0, 120) + '...';
                 }
             } catch(ex) {
             }

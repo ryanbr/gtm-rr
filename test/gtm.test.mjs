@@ -822,6 +822,36 @@ describe('googletagmanager_gtm', ( ) => {
         assert.equal(out.length, 1, out.join(' | '));
     });
 
+    it('names the page script, not one of its own frames', ( ) => {
+        // The field case, reproduced: uBO injects a scriptlet from a blob:
+        // URL belonging to the page, so this resource's own frames carry a
+        // real source and a name a page could have used - trademe reported
+        //   from=get@blob:https://www.trademe.co.nz/<uuid>:528:39
+        // which is the proxy's own get trap, not the page. A sourceURL on
+        // each side puts both in that shape.
+        const dom = new JSDOM(fixture, {
+            runScripts: 'outside-only', url: URL,
+        });
+        const w = dom.window;
+        const out = lines(w);
+        snippet()(w);
+        w.eval(neutered +
+            '\n//# sourceURL=blob:https://www.example.com/0123-4567');
+        w.eval('//# sourceURL=https://site.example/app.js\n' +
+            'window.pageCode = function get(){' +
+            ' return window.google_tag_manager["' + ID + '"].somethingMissing;' +
+            '};');
+        w.pageCode();
+        const line = out.find(
+            l => l.includes(' missing=container.somethingMissing')
+        );
+        assert.ok(line !== undefined, out.join(' | '));
+        // The page's own file, even though its function is called get - the
+        // same name as the trap that saw the read - and not the blob.
+        assert.match(line, / from=.*app\.js/);
+        assert.equal(line.includes('blob:'), false, line);
+    });
+
     it('echoes what a page passed, and who asked, when asked to',
     async ( ) => {
         let out;
