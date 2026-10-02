@@ -37,10 +37,9 @@ This resource answers all three, and nothing else.
 ## Install
 
 uBlock Origin fetches user resources from the URLs in its hidden setting
-`userResourcesLocation` (Settings > Advanced > click `advanced settings`):
-
-It is one setting on **one line**, the name and then every URL you want,
-separated by spaces:
+`userResourcesLocation` (Settings > Advanced > click `advanced settings`). It
+is one setting on **one line**: the name, then every URL you want, separated
+by spaces.
 
 ```
 userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.0/dist/ga-optout.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.0/dist/gtm-tag.js
