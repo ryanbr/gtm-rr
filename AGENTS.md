@@ -93,8 +93,10 @@ map. Bump the family's entry when its resources change, the repo version when
 releasing, and the pinned URLs in `README.md` - the build refuses to run if a
 pinned URL names a different version. Most pushes are not releases.
 
-**There is no release yet, so the install URLs in `README.md` point at `main`
-and the build's pin check has nothing to check.** The first release has to put
-a tag in those URLs - `gtm-rr/v1.0.0/dist/...` - which is also what turns the
-check back on. Until then an install follows `main`, which is honest about what
-it is but means a user gets a change the moment it lands.
+The install URLs in `README.md` are pinned to a tag, and the build reads them:
+it refuses to run if one names a version other than `package.json`'s. So a
+release is three things in one commit - the version, the resource versions that
+changed, and those URLs - and the tag goes on that commit.
+
+Nothing is published to npm. A `cdn.jsdelivr.net/npm/...` URL would need that,
+so none is offered.

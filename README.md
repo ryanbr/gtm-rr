@@ -35,14 +35,15 @@ uBlock Origin fetches user resources from the URLs in its hidden setting
 `userResourcesLocation` (Settings > Advanced > click `advanced settings`):
 
 ```
-https://raw.githubusercontent.com/ryanbr/gtm-rr/main/dist/googletagmanager_gtm.js
-https://raw.githubusercontent.com/ryanbr/gtm-rr/main/dist/ga-optout.js
+https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.0.0/dist/googletagmanager_gtm.js
+https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.0.0/dist/ga-optout.js
 ```
 
 The setting takes several whitespace-separated URLs.
 
-These point at `main`, so they follow it: there is no release to pin to yet.
-When there is one, the URLs here become a tag.
+These are pinned to a release, so an install stays where it is until you move
+it. `main` in place of `v1.0.0` follows the branch instead, which is useful for
+testing a fix and not for leaving in place.
 
 **For the first one that is the whole install.** uBO's default lists already
 send both loaders to `googletagmanager_gtm.js`:
