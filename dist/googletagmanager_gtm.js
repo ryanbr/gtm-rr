@@ -70,6 +70,7 @@ function consentRRGtmCore(options) {
             const wanted = String(value).toLowerCase();
             if ( wanted === 'off' || wanted === '0' ) { return 'off'; }
             if ( wanted === 'quiet' ) { return 'quiet'; }
+            if ( wanted === 'probe' ) { return 'probe'; }
             return 'verbose';
         } catch(ex) {
         }
@@ -77,7 +78,8 @@ function consentRRGtmCore(options) {
     };
     const level = setting();
     const debug = level !== 'off';
-    const verbose = level === 'verbose';
+    const verbose = level === 'verbose' || level === 'probe';
+    const probing = level === 'probe';
     const named = {};
     const CAP = 160;
     const snippet = value => {
@@ -164,6 +166,32 @@ function consentRRGtmCore(options) {
         } catch(ex) {
         }
     };
+    const STRUCTURAL = [
+        'then', 'toJSON', 'valueOf', 'toString', 'constructor', 'inspect',
+        'length', 'name', 'prototype', 'nodeType', 'tagName', 'item',
+    ];
+    const structural = Object.create(null);
+    for ( const name of STRUCTURAL ) { structural[name] = true; }
+    const probes = Object.create(null);
+    const probe = (where, property) => {
+        if ( probes[property] === undefined ) {
+            probes[property] = function( ) {
+                try {
+                    const args = [].slice.call(arguments, 0);
+                    w.console.info(
+                        '[gtm-rr] ' + options.name + ' ' + VERSION +
+                        ' called=' + where + '.' + property +
+                        ' id=' + (id !== '' ? id : 'unknown') +
+                        ' args=' + snippet(args) +
+                        ' from=' + caller()
+                    );
+                } catch(ex) {
+                }
+                return undefined;
+            };
+        }
+        return probes[property];
+    };
     const watch = (object, where, known) => {
         if ( debug === false ) { return object; }
         const mine = Object.create(null);
@@ -171,12 +199,22 @@ function consentRRGtmCore(options) {
         try {
             return new w.Proxy(object, {
                 get(target, property, receiver) {
-                    if ( typeof property === 'string' ) {
-                        if ( mine[property] === undefined ) {
-                            report(where, property);
-                        }
+                    if ( typeof property !== 'string' ) {
+                        return Reflect.get(target, property, receiver);
                     }
-                    return Reflect.get(target, property, receiver);
+                    if ( mine[property] !== undefined ) {
+                        return Reflect.get(target, property, receiver);
+                    }
+                    report(where, property);
+                    if ( probing === false ) {
+                        return Reflect.get(target, property, receiver);
+                    }
+                    if ( structural[property] !== undefined ) {
+                        return Reflect.get(target, property, receiver);
+                    }
+                    const held = Reflect.get(target, property, receiver);
+                    if ( held !== undefined ) { return held; }
+                    return probe(where, property);
                 },
             });
         } catch(ex) {

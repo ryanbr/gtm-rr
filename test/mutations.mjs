@@ -252,13 +252,13 @@ export default [
     {
         label: 'debug: page data echoed at the quiet level',
         file: CORE,
-        from: "    const verbose = level === 'verbose';",
+        from: "    const verbose = level === 'verbose' || level === 'probe';",
         to: "    const verbose = level !== 'off';",
     },
     {
         label: 'debug: verbose by default',
         file: CORE,
-        from: "    const verbose = level === 'verbose';",
+        from: "    const verbose = level === 'verbose' || level === 'probe';",
         to: '    const verbose = true;',
     },
     {
@@ -282,8 +282,10 @@ export default [
     {
         label: 'debug: known names reported too',
         file: CORE,
-        from: '                        if ( mine[property] === undefined ) {',
-        to: '                        if ( true ) {',
+        from: `                    if ( mine[property] !== undefined ) {
+                        return Reflect.get(target, property, receiver);
+                    }`,
+        to: '',
     },
     {
         label: 'debug: a name is reported every time',
@@ -301,16 +303,12 @@ export default [
     {
         label: 'debug: the proxy changes what a page reads',
         file: CORE,
-        from: `                        if ( mine[property] === undefined ) {
-                            report(where, property);
-                        }
-                    }
-                    return Reflect.get(target, property, receiver);`,
-        to: `                        if ( mine[property] === undefined ) {
-                            report(where, property);
-                        }
-                    }
-                    return undefined;`,
+        from: `                    if ( probing === false ) {
+                        return Reflect.get(target, property, receiver);
+                    }`,
+        to: `                    if ( probing === false ) {
+                        return undefined;
+                    }`,
     },
     {
         label: 'debug: ga calls are not named',
@@ -342,8 +340,14 @@ export default [
     {
         label: 'debug: the caller is not named',
         file: CORE,
-        from: "                ' from=' + caller()",
-        to: "                ''",
+        from: `                (verbose && value !== undefined
+                    ? ' args=' + snippet(value)
+                    : '') +
+                ' from=' + caller()`,
+        to: `                (verbose && value !== undefined
+                    ? ' args=' + snippet(value)
+                    : '') +
+                ''`,
     },
 
     {
@@ -378,6 +382,43 @@ export default [
         file: CORE,
         from: "            if ( registry.consentRRGtmWatched === VERSION ) { return; }",
         to: '',
+    },
+
+    {
+        label: 'probe: a missing method is not answered',
+        file: CORE,
+        from: '                    if ( probing === false ) {',
+        to: '                    if ( true ) {',
+    },
+    {
+        label: 'probe: answers at every level',
+        file: CORE,
+        from: "    const probing = level === 'probe';",
+        to: '    const probing = debug;',
+    },
+    {
+        label: 'probe: structural names answered too',
+        file: CORE,
+        from: '                    if ( structural[property] !== undefined ) {\n                        return Reflect.get(target, property, receiver);\n                    }',
+        to: '',
+    },
+    {
+        label: 'probe: a new function on every read',
+        file: CORE,
+        from: '        if ( probes[property] === undefined ) {',
+        to: '        if ( true ) {',
+    },
+    {
+        label: 'probe: a real value is replaced by a function',
+        file: CORE,
+        from: '                    const held = Reflect.get(target, property, receiver);\n                    if ( held !== undefined ) { return held; }',
+        to: '',
+    },
+    {
+        label: 'probe: the call is not reported',
+        file: CORE,
+        from: "                        ' called=' + where + '.' + property +",
+        to: "                        ' called=' +",
     },
 
     // The opt-out, which is a different job in the same repo.

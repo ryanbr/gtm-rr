@@ -620,6 +620,7 @@ describe('googletagmanager_gtm', ( ) => {
         }
     };
     const debugOff = w_ => debugLevel(w_, 'off');
+    const debugProbe = w_ => debugLevel(w_, 'probe');
     const debugQuiet = w_ => debugLevel(w_, 'quiet');
     // The default, so asking for it is asking for nothing.
     const debugVerbose = ( ) => undefined;
@@ -734,6 +735,72 @@ describe('googletagmanager_gtm', ( ) => {
             Object.keys(w.google_tag_manager).sort(),
             [ ID, 'dataLayer', 'rm', 'somethingElse' ].sort()
         );
+    });
+
+    it('answers a call to a method that is not here, and says what it carried',
+    ( ) => {
+        let out;
+        const w = boot({
+            before: w_ => { debugProbe(w_); out = lines(w_); snippet()(w_); },
+        });
+        // What a page was about to do with the thing it could not find is the
+        // part that says what to build. At the default level this throws in
+        // the page and the arguments are lost with it.
+        w.google_tag_manager[ID].setConsentState('granted', { wait: 500 });
+        const said = out.join(' | ');
+        assert.ok(said.includes(' missing=container.setConsentState'), said);
+        assert.ok(
+            said.includes(' called=container.setConsentState' +
+                ' id=' + ID + ' args=["granted",{wait:500}]'),
+            said
+        );
+    });
+
+    it('hands back the same function for a name, and keeps structure alone',
+    async ( ) => {
+        const w = boot({
+            before: w_ => { debugProbe(w_); snippet()(w_); },
+        });
+        const container = w.google_tag_manager[ID];
+        // A page may compare what it was given across reads.
+        assert.equal(container.whatever, container.whatever);
+        assert.equal(typeof container.whatever, 'function');
+        // And the names that change what an object is, rather than what it
+        // does, are never answered with one: a thenable breaks an await.
+        assert.equal(container.then, undefined);
+        assert.equal(container.toJSON, undefined);
+        const awaited = await Promise.resolve(container);
+        assert.equal(awaited, container);
+    });
+
+    it('gives back a value that is really there, at either level', ( ) => {
+        // Something wrote a field this does not know about - theirs sets
+        // pruned on that entry - so reading it has to give the field back.
+        // Watching a thing must not change what reading it answers.
+        for ( const level of [ undefined, 'probe' ] ) {
+            const w = boot({
+                before: w_ => {
+                    if ( level !== undefined ) { debugLevel(w_, level); }
+                    snippet()(w_);
+                },
+            });
+            w.google_tag_manager.dataLayer.pruned = true;
+            assert.equal(
+                w.google_tag_manager.dataLayer.pruned, true, String(level)
+            );
+            // Named once, since it is still something this does not provide.
+            assert.equal(w.google_tag_manager.dataLayer.subscribers, 1);
+        }
+    });
+
+    it('leaves a missing name missing unless asked to probe', ( ) => {
+        const w = boot({ before: snippet() });
+        // The default has to leave a page's own check alone: asking whether
+        // something is there and being told yes is a different page.
+        assert.equal(w.google_tag_manager[ID].setConsentState, undefined);
+        assert.throws(( ) => {
+            w.google_tag_manager[ID].setConsentState('granted');
+        });
     });
 
     it('leaves what it does provide unremarked, and working', ( ) => {

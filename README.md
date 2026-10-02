@@ -121,17 +121,44 @@ to start. A property's are not echoed: a missing property had no value to read,
 and an `args=` there would be one this resource invented. What is echoed is
 shallow and capped at 160 characters.
 
-Three levels:
+### Chasing an unknown call
+
+A site calling something that is not here - `google_tag_manager[id]
+.setConsentState('granted', {wait: 500})` - gets a reported read and then a
+`TypeError`, and the arguments go with it. Those arguments are the part that
+says what to build, so there is a level that catches the call instead:
 
 ```js
+localStorage.setItem('gtm-rr-debug', 'probe')   // then reload
+```
+
+```
+missing=container.setConsentState  id=GTM-W4F8P893
+called=container.setConsentState   id=GTM-W4F8P893 args=["granted",{wait:500}]
+```
+
+and the page carries on, because the call was answered rather than failed.
+
+**Use it to chase something, not to leave on.** A read of a name that is not
+here answers with a function, so a page that asks whether something exists
+before using it now gets yes and takes its other branch - which is a different
+page from the one being debugged. Names that change what an object *is* rather
+than what it does (`then`, `toJSON`, `valueOf`, …) are never answered with one,
+so an `await` or a `JSON.stringify` still behaves, and a value that really is
+there is given back rather than stood in for.
+
+### Levels
+
+```js
+localStorage.setItem('gtm-rr-debug', 'probe')   // + answer missing calls
 localStorage.setItem('gtm-rr-debug', 'quiet')   // names only, no page data
 localStorage.setItem('gtm-rr-debug', 'off')     // nothing, nothing wrapped
 ```
 
-`quiet` drops the arguments and the commands that went nowhere, which is what
-to use if you would rather a console you paste somewhere did not carry a
-transaction id or a `user_data` payload. `off` stops anything being wrapped at
-all: one storage read and no more.
+`verbose` is the default. `quiet` drops the arguments and the commands that
+went nowhere, which is what to use if you would rather a console you paste
+somewhere did not carry a transaction id or a `user_data` payload. `off` stops
+anything being wrapped at all: one storage read and no more.
 
 Otherwise the objects handed to the page are watched through a get-only
 `Proxy`, so their keys, their values and their behaviour are unchanged: a page

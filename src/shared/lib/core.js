@@ -184,9 +184,20 @@ function consentRRGtmCore(options) {
     //   quiet     the name of what was asked for, and who asked
     //   verbose   those, plus the arguments the page passed, plus every
     //             command that went nowhere - the default
+    //   probe     those, and a missing method answers the call instead of
+    //             failing it, so what the page meant to pass is reported
     //
+    //   localStorage.setItem('gtm-rr-debug', 'probe')
     //   localStorage.setItem('gtm-rr-debug', 'quiet')
     //   localStorage.setItem('gtm-rr-debug', 'off')
+    //
+    // probe is for chasing something, not for leaving on. A read of a name
+    // that is not here answers with a function, so
+    //   google_tag_manager[id].whatever(a, b)
+    // reports a and b instead of throwing - but a page that asks whether
+    // something exists before using it now gets yes, and takes the other
+    // branch. That is a different page from the one being debugged, which is
+    // why it is not a default.
     //
     // What verbose carries that quiet does not is the page's own data - a
     // transaction id, a user_data payload, a path with an order number in it
@@ -205,6 +216,7 @@ function consentRRGtmCore(options) {
             const wanted = String(value).toLowerCase();
             if ( wanted === 'off' || wanted === '0' ) { return 'off'; }
             if ( wanted === 'quiet' ) { return 'quiet'; }
+            if ( wanted === 'probe' ) { return 'probe'; }
             return 'verbose';
         } catch(ex) {
         }
@@ -213,7 +225,8 @@ function consentRRGtmCore(options) {
 
     const level = setting();
     const debug = level !== 'off';
-    const verbose = level === 'verbose';
+    const verbose = level === 'verbose' || level === 'probe';
+    const probing = level === 'probe';
     const named = {};
 
     // What a page passed, bounded and shallow. A console line is something a
@@ -326,6 +339,44 @@ function consentRRGtmCore(options) {
     };
 
     // Only where it is on, and only for what the page asks for by name.
+    // Names that change what an object is rather than what it does, so a
+    // function is never handed back for one of them: a thenable breaks an
+    // await, a toJSON breaks a stringify, and the rest are read by anything
+    // that inspects a value.
+    const STRUCTURAL = [
+        'then', 'toJSON', 'valueOf', 'toString', 'constructor', 'inspect',
+        'length', 'name', 'prototype', 'nodeType', 'tagName', 'item',
+    ];
+
+    const structural = Object.create(null);
+    for ( const name of STRUCTURAL ) { structural[name] = true; }
+
+    // In probe, a name that is not here answers with a function, so the call
+    // a page was about to make happens and says what it carried instead of
+    // throwing on undefined. One function per name, so repeated reads of the
+    // same one give the same thing back - a page may compare them.
+    const probes = Object.create(null);
+
+    const probe = (where, property) => {
+        if ( probes[property] === undefined ) {
+            probes[property] = function( ) {
+                try {
+                    const args = [].slice.call(arguments, 0);
+                    w.console.info(
+                        '[gtm-rr] ' + options.name + ' ' + VERSION +
+                        ' called=' + where + '.' + property +
+                        ' id=' + (id !== '' ? id : 'unknown') +
+                        ' args=' + snippet(args) +
+                        ' from=' + caller()
+                    );
+                } catch(ex) {
+                }
+                return undefined;
+            };
+        }
+        return probes[property];
+    };
+
     const watch = (object, where, known) => {
         if ( debug === false ) { return object; }
         // A lookup rather than a scan: this runs on every property read a
@@ -335,12 +386,22 @@ function consentRRGtmCore(options) {
         try {
             return new w.Proxy(object, {
                 get(target, property, receiver) {
-                    if ( typeof property === 'string' ) {
-                        if ( mine[property] === undefined ) {
-                            report(where, property);
-                        }
+                    if ( typeof property !== 'string' ) {
+                        return Reflect.get(target, property, receiver);
                     }
-                    return Reflect.get(target, property, receiver);
+                    if ( mine[property] !== undefined ) {
+                        return Reflect.get(target, property, receiver);
+                    }
+                    report(where, property);
+                    if ( probing === false ) {
+                        return Reflect.get(target, property, receiver);
+                    }
+                    if ( structural[property] !== undefined ) {
+                        return Reflect.get(target, property, receiver);
+                    }
+                    const held = Reflect.get(target, property, receiver);
+                    if ( held !== undefined ) { return held; }
+                    return probe(where, property);
                 },
             });
         } catch(ex) {
