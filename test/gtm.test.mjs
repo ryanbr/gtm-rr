@@ -336,6 +336,80 @@ describe('googletagmanager_gtm', ( ) => {
         assert.equal(w.gtag.name, 'gtag');
     });
 
+    // The other loader's page: their snippet defines gtag itself, and the
+    // resource is serving /gtag/js.
+    const GTAG_PAGE = '<!doctype html><html><head><script async src=' +
+        '"https://www.googletagmanager.com/gtag/js?id=G-KQ9NC85WD9">' +
+        '</scr' + 'ipt></head><body><p id="content">x</p></body></html>';
+
+    const bootGtag = (before_ = undefined) => boot({
+        html: GTAG_PAGE,
+        before: w_ => {
+            if ( typeof before_ === 'function' ) { before_(w_); }
+            w_.eval('window.dataLayer = window.dataLayer || [];' +
+                'window.gtag = function gtag(){' +
+                ' window.dataLayer.push(arguments); };' +
+                'window.gtag("js", new Date());' +
+                'window.gtag("config", "G-KQ9NC85WD9");');
+        },
+    });
+
+    it('answers their get command and no other', async ( ) => {
+        const w = bootGtag();
+        const seen = [];
+        const cb = v => { seen.push(v); };
+        // Their RD table routes on the first argument, so a command carrying
+        // the same four-argument shape is not a get, and its function is not
+        // a callback to be called.
+        w.gtag('set', 'page_title', 'Home', cb);
+        w.gtag('config', 'G-OTHER12345', 'x', cb);
+        await settle(10);
+        assert.deepEqual(seen, []);
+        w.gtag('get', 'G-KQ9NC85WD9', 'client_id', cb);
+        await settle(10);
+        assert.deepEqual(seen, [ undefined ]);
+    });
+
+    it('reads commands only out of an arguments object, as theirs does',
+    async ( ) => {
+        const w = bootGtag();
+        const seen = [];
+        // A plain object is data for the model, never a command: theirs takes
+        // its commands from what the page's gtag() pushes, which is always an
+        // arguments object.
+        w.dataLayer.push({
+            0: 'get', 1: 'G-KQ9NC85WD9', 2: 'client_id',
+            3: v => { seen.push(v); }, length: 4,
+        });
+        await settle(10);
+        assert.deepEqual(seen, []);
+    });
+
+    it('takes their whole command table without putting it in the model',
+    async ( ) => {
+        const w = bootGtag();
+        for ( const args of [
+            [ 'config', 'G-KQ9NC85WD9', { send_page_view: false } ],
+            [ 'event', 'purchase', { value: 1 } ],
+            [ 'set', { currency: 'GBP' } ],
+            [ 'consent', 'default', { ad_storage: 'denied' } ],
+            [ 'consent', 'update', { ad_storage: 'granted' } ],
+            [ 'policy', 'ads_data_redaction' ],
+        ] ) {
+            w.gtag.apply(null, args);
+        }
+        await settle(10);
+        const model = w.google_tag_manager['G-KQ9NC85WD9'].dataLayer;
+        // A command is not model data, and theirs does not merge one: the
+        // numeric keys of an arguments object have no business in there, and
+        // neither has what a set carried.
+        assert.equal(model.get('0'), undefined);
+        assert.equal(model.get('1'), undefined);
+        assert.equal(model.get('currency'), undefined);
+        // Nor is any consent state invented from a consent command.
+        assert.equal(w.google_tag_data, undefined);
+    });
+
     it('puts the container two fields on the container loader only', ( ) => {
         const w = boot({ before: snippet() });
         assert.equal(typeof w.google_tag_manager[ID].onHtmlSuccess, 'function');

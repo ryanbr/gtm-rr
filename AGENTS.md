@@ -57,10 +57,22 @@ Carried over from consent-rr, where each cost a release:
 ## Testing
 
 `npm test` builds, then runs the suite **against `dist/`**, parsed with uBO's
-own line rules.
+own line rules. `npm run mutate` then breaks the source on purpose, one
+mutation at a time, and checks the suite notices.
 
-- **Mutation-test anything you add.** Break the code a test covers and watch it
-  fail; if the suite stays green the test is pointed at the wrong thing.
+- **Every test here is meant to fail against broken code, and `npm run mutate`
+  is how that is known.** Add a mutation to `test/mutations.mjs` for anything
+  you add - `{ label, file, from, to }`, where `from` must match its file
+  exactly once or the mutation is reported `stale` rather than skipped. CI runs
+  it, so a test that proves nothing fails the build.
+- A surviving mutation is not automatically a missing test: check it really
+  disabled the behaviour. One that cannot - an expression whose result is
+  caught and discarded either way - belongs in the manifest as
+  `{ equivalent: true }` with the reason, so it is not chased twice.
+- The harness restores the sources on its way out, including on Ctrl-C, and
+  reports `hung` rather than waiting on a mutation that leaves a timer pending
+  - `node --test` will not exit while one is, and a 600-second timer once cost
+  fifteen minutes of nothing happening.
 - jsdom delivers `DOMContentLoaded` in the same turn as an insertion, so a test
   that wants to prove *when* something ran has to remove the other paths - run
   against an already-loaded document rather than trusting a timing assertion.

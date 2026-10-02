@@ -1,0 +1,45 @@
+name: build
+
+# dist/ is what uBlock Origin fetches over a raw URL, so a stale copy there
+# ships stale code to everyone. This rebuilds from src/ and fails if the result
+# differs from what was committed.
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'tools/**'
+      - 'test/**'
+      - 'dist/**'
+      - 'filters/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Builds, then runs the suite against the built files.
+      - run: npm test
+      - name: dist matches src
+        run: |
+          if ! git diff --exit-code --stat -- dist; then
+            echo "::error::committed output is stale - run 'npm test' and commit the result"
+            exit 1
+          fi
+      # Every test here is meant to fail against broken code. This proves it,
+      # by breaking the code on purpose - see tools/mutate.mjs.
+      - run: npm run mutate
