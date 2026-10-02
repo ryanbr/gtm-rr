@@ -570,22 +570,60 @@ describe('googletagmanager_gtm', ( ) => {
         assert.ok(w.google_tag_manager[ID]);
     });
 
-    // Off by default, so the tests that want it say so.
-    const debugOn = w_ => {
+    // On by default; the flag either silences it or asks for more.
+    const debugLevel = (w_, level) => {
         try {
-            w_.localStorage.setItem('gtm-rr-debug', '1');
+            w_.localStorage.setItem('gtm-rr-debug', level);
         } catch(ex) {
         }
     };
+    const debugOn = ( ) => undefined;
+    const debugOff = w_ => debugLevel(w_, 'off');
+    const debugVerbose = w_ => debugLevel(w_, 'verbose');
 
-    it('says nothing about what a page reads while debugging is off', ( ) => {
+    it('says nothing once a visitor has silenced it', ( ) => {
         let out;
-        const w = boot({ before: w_ => { out = lines(w_); snippet()(w_); } });
+        const w = boot({
+            before: w_ => { debugOff(w_); out = lines(w_); snippet()(w_); },
+        });
         // Nothing is wrapped when it is off, so nothing can be reported.
         w.google_tag_manager[ID].somethingWeDoNotHave;
         w.google_tag_manager[ID].dataLayer.alsoNot;
         assert.equal(out.length, 1);
         assert.ok(out[0].includes(' debug=off'), out[0]);
+    });
+
+    it('names what a page reads without being asked to', ( ) => {
+        let out;
+        const w = boot({ before: w_ => { out = lines(w_); snippet()(w_); } });
+        // The default: the part of their API a site wanted and did not get.
+        assert.ok(out[0].includes(' debug=on'), out[0]);
+        w.google_tag_manager[ID].SANDBOXED_JS_SEMAPHORE;
+        assert.ok(
+            out.some(l => l.includes(' missing=container.SANDBOXED_JS_SEMAPHORE')),
+            out.join(' | ')
+        );
+    });
+
+    it('keeps the page own data out of the console by default', async ( ) => {
+        let out;
+        const w = bootGtag(w_ => { out = lines(w_); });
+        w.gtag('set', 'user_data', { email: 'someone@example.com' });
+        w.gtag('event', 'purchase', { transaction_id: 'T-12345' });
+        // ga is reported by default - a page calling it means analytics.js
+        // was blocked without a stub - so what it was called with has to be
+        // held back here too.
+        w.ga('send', 'pageview', '/account/orders/T-12345');
+        await settle(10);
+        const said = out.join(' | ');
+        // A console is pasted into bug reports. What the page passed is the
+        // page's data, and a command going nowhere is this resource working.
+        assert.equal(said.includes('someone@example.com'), false);
+        assert.equal(said.includes('T-12345'), false);
+        assert.equal(said.includes(' missing=command.'), false);
+        // The name of the thing it asked for is still said.
+        assert.ok(said.includes(' missing=ga.send'), said);
+        assert.equal(said.includes(' args='), false);
     });
 
     it('names what a page reads that is not here', ( ) => {
@@ -632,9 +670,10 @@ describe('googletagmanager_gtm', ( ) => {
         assert.equal(out.length, 1, out.join(' | '));
     });
 
-    it('echoes what a page passed, and who asked', async ( ) => {
+    it('echoes what a page passed, and who asked, when asked to',
+    async ( ) => {
         let out;
-        const w = bootGtag(w_ => { debugOn(w_); out = lines(w_); });
+        const w = bootGtag(w_ => { debugVerbose(w_); out = lines(w_); });
         w.gtag('consent', 'update', { ad_storage: 'granted' });
         await settle(10);
         const line = out.find(l => l.includes(' missing=command.consent'));
@@ -660,7 +699,7 @@ describe('googletagmanager_gtm', ( ) => {
 
     it('keeps what it echoes short', async ( ) => {
         let out;
-        const w = bootGtag(w_ => { debugOn(w_); out = lines(w_); });
+        const w = bootGtag(w_ => { debugVerbose(w_); out = lines(w_); });
         // A console line is something a visitor pastes into a report, so a
         // page passing a page's worth of data does not get a page's worth of
         // line.
@@ -675,7 +714,7 @@ describe('googletagmanager_gtm', ( ) => {
 
     it('survives what a page hands it', async ( ) => {
         let out;
-        const w = bootGtag(w_ => { debugOn(w_); out = lines(w_); });
+        const w = bootGtag(w_ => { debugVerbose(w_); out = lines(w_); });
         // Circular, and a getter that throws when read: both are things a
         // page can pass, and neither may throw in here - this runs inside the
         // page's own call to push.
@@ -693,9 +732,9 @@ describe('googletagmanager_gtm', ( ) => {
         assert.equal(w.dataLayer.length > 0, true);
     });
 
-    it('names a gtag command that went nowhere', async ( ) => {
+    it('names a gtag command that went nowhere, when asked to', async ( ) => {
         let out;
-        const w = bootGtag(w_ => { debugOn(w_); out = lines(w_); });
+        const w = bootGtag(w_ => { debugVerbose(w_); out = lines(w_); });
         w.gtag('consent', 'update', { ad_storage: 'granted' });
         w.gtag('event', 'purchase', { value: 1 });
         await settle(10);
@@ -764,7 +803,7 @@ describe('googletagmanager_gtm', ( ) => {
             '[gtm-rr] googletagmanager_gtm ' + versions.gtm +
             ' loader=/gtm.js id=' + ID +
             ' layer=dataLayer push=hooked container=installed hide=absent' +
-            ' debug=off'
+            ' debug=on'
         );
     });
 });

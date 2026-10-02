@@ -63,14 +63,21 @@ function consentRRGtmCore(options) {
         return found;
     };
     const { id, layer, path } = settings();
-    const debugging = ( ) => {
+    const setting = ( ) => {
         try {
-            return w.localStorage.getItem('gtm-rr-debug') !== null;
+            const value = w.localStorage.getItem('gtm-rr-debug');
+            if ( value === null ) { return 'on'; }
+            const wanted = String(value).toLowerCase();
+            if ( wanted === 'off' || wanted === '0' ) { return 'off'; }
+            if ( wanted === 'verbose' ) { return 'verbose'; }
+            return 'on';
         } catch(ex) {
         }
-        return false;
+        return 'on';
     };
-    const debug = debugging();
+    const level = setting();
+    const debug = level !== 'off';
+    const verbose = level === 'verbose';
     const named = {};
     const CAP = 160;
     const snippet = value => {
@@ -149,7 +156,9 @@ function consentRRGtmCore(options) {
                 '[gtm-rr] ' + options.name + ' ' + VERSION +
                 ' missing=' + key +
                 ' id=' + (id !== '' ? id : 'unknown') +
-                (value !== undefined ? ' args=' + snippet(value) : '') +
+                (verbose && value !== undefined
+                    ? ' args=' + snippet(value)
+                    : '') +
                 ' from=' + caller()
             );
         } catch(ex) {
@@ -303,7 +312,7 @@ function consentRRGtmCore(options) {
             answered = command(item, w) === true;
         } catch(ex) {
         }
-        if ( debug === false || answered ) { return; }
+        if ( verbose === false || answered ) { return; }
         try {
             if ( Object.prototype.toString.call(item) !== '[object Arguments]' ) {
                 return;
@@ -442,6 +451,7 @@ function consentRRGtmCore(options) {
         id, layer, path, hooked, installed, container, registry,
         hiding: ( ) => hiding,
         debug,
+        level,
         report,
     };
 }
@@ -526,7 +536,7 @@ function consentRRGtm() {
             ' push=' + report.hooked +
             ' container=' + report.installed +
             ' hide=' + report.hiding() +
-            ' debug=' + (report.debug ? 'on' : 'off')
+            ' debug=' + report.level
         );
     } catch(ex) {
     }

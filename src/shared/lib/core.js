@@ -166,27 +166,49 @@ function consentRRGtmCore(options) {
 
     const { id, layer, path } = settings();
 
-    // Off unless a visitor turns it on, because a page that half-works is
-    // reported as "it half-works" and the useful question is which part of
-    // their API the site asked for that is not here. When on, a read of
-    // anything this does not provide is named once.
+    // On, because a page that half-works is reported as "it half-works" and
+    // the useful question is which part of their API the site asked for that
+    // is not here. What that costs by default is one line per name, once, for
+    // something this does not provide - which on a working page is nothing at
+    // all.
     //
-    //   localStorage.setItem('gtm-rr-debug', '1')   then reload
+    // Two things are held back from the default, and both for the same
+    // reason: they would be noise or worse on every page, for everyone.
     //
-    // Off, it costs one storage read; nothing is wrapped and nothing is
-    // watched. On, the objects this hands the page are watched through a
-    // get-only Proxy, which leaves their keys, their values and their own
+    //   the arguments a page passed    they are the page's data - a
+    //                                  transaction id, a user_data payload -
+    //                                  and a console is pasted into bug
+    //                                  reports and screenshots. Not echoed
+    //                                  unless asked for.
+    //   a command that went nowhere    most of them do, by design: that is
+    //                                  this resource working. A line each on
+    //                                  every page view buries the ones that
+    //                                  matter.
+    //
+    //   localStorage.setItem('gtm-rr-debug', 'verbose')   both of those too
+    //   localStorage.setItem('gtm-rr-debug', 'off')       nothing at all
+    //
+    // Silenced, it costs one storage read: nothing is wrapped and nothing is
+    // watched. Otherwise the objects this hands the page are watched through
+    // a get-only Proxy, which leaves their keys, their values and their own
     // behaviour alone - a page enumerating the container object still sees
     // exactly what it would have.
-    const debugging = ( ) => {
+    const setting = ( ) => {
         try {
-            return w.localStorage.getItem('gtm-rr-debug') !== null;
+            const value = w.localStorage.getItem('gtm-rr-debug');
+            if ( value === null ) { return 'on'; }
+            const wanted = String(value).toLowerCase();
+            if ( wanted === 'off' || wanted === '0' ) { return 'off'; }
+            if ( wanted === 'verbose' ) { return 'verbose'; }
+            return 'on';
         } catch(ex) {
         }
-        return false;
+        return 'on';
     };
 
-    const debug = debugging();
+    const level = setting();
+    const debug = level !== 'off';
+    const verbose = level === 'verbose';
     const named = {};
 
     // What a page passed, bounded and shallow. A console line is something a
@@ -289,7 +311,9 @@ function consentRRGtmCore(options) {
                 '[gtm-rr] ' + options.name + ' ' + VERSION +
                 ' missing=' + key +
                 ' id=' + (id !== '' ? id : 'unknown') +
-                (value !== undefined ? ' args=' + snippet(value) : '') +
+                (verbose && value !== undefined
+                    ? ' args=' + snippet(value)
+                    : '') +
                 ' from=' + caller()
             );
         } catch(ex) {
@@ -492,7 +516,9 @@ function consentRRGtmCore(options) {
             answered = command(item, w) === true;
         } catch(ex) {
         }
-        if ( debug === false || answered ) { return; }
+        // A command that went nowhere is this resource working, so it is
+        // only worth a line where it was asked for.
+        if ( verbose === false || answered ) { return; }
         // A command that went nowhere, which is most of them and the point of
         // this resource - but worth naming when a page is misbehaving, since
         // the one it was waiting on will be in here.
@@ -660,6 +686,7 @@ function consentRRGtmCore(options) {
         id, layer, path, hooked, installed, container, registry,
         hiding: ( ) => hiding,
         debug,
+        level,
         report,
     };
 }

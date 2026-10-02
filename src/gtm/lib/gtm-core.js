@@ -182,7 +182,7 @@ function consentRRGtm() {
             ' push=' + report.hooked +
             ' container=' + report.installed +
             ' hide=' + report.hiding() +
-            ' debug=' + (report.debug ? 'on' : 'off')
+            ' debug=' + report.level
         );
     } catch(ex) {
     }

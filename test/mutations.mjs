@@ -198,10 +198,34 @@ export default [
 
     // The debug reporting, which is off unless a visitor turns it on.
     {
-        label: 'debug: on by default',
+        label: 'debug: off by default',
         file: CORE,
-        from: "            return w.localStorage.getItem('gtm-rr-debug') !== null;",
-        to: '            return true;',
+        from: "            if ( value === null ) { return 'on'; }",
+        to: "            if ( value === null ) { return 'off'; }",
+    },
+    {
+        label: 'debug: cannot be silenced',
+        file: CORE,
+        from: "            if ( wanted === 'off' || wanted === '0' ) { return 'off'; }",
+        to: '',
+    },
+    {
+        label: 'debug: verbose by default',
+        file: CORE,
+        from: "    const verbose = level === 'verbose';",
+        to: '    const verbose = true;',
+    },
+    {
+        label: 'debug: page data echoed by default',
+        file: CORE,
+        from: "                (verbose && value !== undefined\n                    ? ' args=' + snippet(value)\n                    : '') +",
+        to: "                (value !== undefined ? ' args=' + snippet(value) : '') +",
+    },
+    {
+        label: 'debug: every command reported by default',
+        file: CORE,
+        from: '        if ( verbose === false || answered ) { return; }',
+        to: '        if ( debug === false || answered ) { return; }',
     },
     {
         label: 'debug: nothing is watched',
@@ -225,8 +249,8 @@ export default [
     {
         label: 'debug: an answered command is reported missing',
         file: CORE,
-        from: '        if ( debug === false || answered ) { return; }',
-        to: '        if ( debug === false ) { return; }',
+        from: '        if ( verbose === false || answered ) { return; }',
+        to: '        if ( answered === false ) { return; }',
     },
     {
         label: 'debug: the proxy changes what a page reads',
@@ -252,7 +276,7 @@ export default [
     {
         label: 'debug: a value is invented for a missing property',
         file: CORE,
-        from: "                (value !== undefined ? ' args=' + snippet(value) : '') +",
+        from: "                (verbose && value !== undefined\n                    ? ' args=' + snippet(value)\n                    : '') +",
         to: "                ' args=' + snippet(value) +",
     },
     {

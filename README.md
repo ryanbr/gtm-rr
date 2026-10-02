@@ -83,31 +83,55 @@ three - and then answering the parts it has none for.
 
 ## When a page half-works
 
-Turn on the reporting and reload:
+The reporting is **on**. Anything a site asks for that this does not provide is
+named once, in the console, with which script asked:
 
-```js
-localStorage.setItem('gtm-rr-debug', '1')
+```
+[gtm-rr] googletagmanager_gtm 1.0.0 missing=container.SANDBOXED_JS_SEMAPHORE
+         id=G-KQ9NC85WD9 from=at https://site/tag.js:4:1
+[gtm-rr] googletagmanager_gtm 1.0.0 missing=ga.send
+         id=G-KQ9NC85WD9 from=at https://site/app.js:12:9
 ```
 
-Off - the default - it costs one storage read: nothing is wrapped and nothing
-is watched. On, anything the page asks for that this does not provide is named
-once, with what was passed and which script asked:
+On a page that works, that is nothing at all.
+
+Two things are held back from the default, both because they would be noise or
+worse on every page, for everyone:
+
+- **what the page passed.** Those are the page's own data - a transaction id, a
+  `user_data` payload - and a console gets pasted into bug reports and
+  screenshots.
+- **a `gtag` command that went nowhere.** Most of them do, by design: that is
+  this resource working. A line each on every page view buries the ones that
+  matter.
+
+Ask for both when you are chasing something:
+
+```js
+localStorage.setItem('gtm-rr-debug', 'verbose')   // then reload
+```
 
 ```
 [gtm-rr] googletagmanager_gtm 1.0.0 missing=command.consent id=G-KQ9NC85WD9
          args=["update",{ad_storage:"granted"}] from=at https://site/app.js:12:9
-[gtm-rr] googletagmanager_gtm 1.0.0 missing=container.SANDBOXED_JS_SEMAPHORE
-         id=G-KQ9NC85WD9 from=at https://site/tag.js:4:1
 ```
 
-A command's arguments are echoed, because they are its value. A property's are
-not: a missing property had no value to read, and an `args=` there would be
-one this resource made up. What is echoed is shallow and capped, since the
-line is something you paste into a report.
+A command's arguments are echoed because they *are* its value. A property's are
+not: a missing property had no value to read, and an `args=` there would be one
+this resource invented. What is echoed is shallow and capped at 160 characters.
 
-The objects it hands the page are watched through a get-only `Proxy`, so their
-keys, their values and their behaviour are unchanged - a page enumerating the
-container object sees exactly what Google's own would give it.
+To silence it entirely:
+
+```js
+localStorage.setItem('gtm-rr-debug', 'off')
+```
+
+which also stops anything being wrapped - that setting costs one storage read
+and nothing else.
+
+Otherwise the objects handed to the page are watched through a get-only
+`Proxy`, so their keys, their values and their behaviour are unchanged: a page
+enumerating the container object sees exactly what Google's own would give it.
 
 ## Why an opt-out as well as a stub
 
