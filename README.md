@@ -45,7 +45,7 @@ is one setting on **one line**: the name, then every URL you want, separated
 by spaces.
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.7.1/dist/gtm-rr-all.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.8.0/dist/gtm-rr-all.js
 ```
 
 **One URL carries all three.** A resources file holds as many resources as it
@@ -57,7 +57,7 @@ built from the same files and the tests check it holds them unchanged.
 To install only some of them, name those instead - still on the one line:
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.7.1/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.7.1/dist/gtm-tag.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.8.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.8.0/dist/gtm-tag.js
 ```
 
 **One URL per line does not work, and fails quietly.** uBO reads a hidden
@@ -76,7 +76,7 @@ straight away: the parsed set is cached in a selfie, invalidated on
 reason to pin a tag.
 
 These are pinned to a release, so an install stays where it is until you move
-it. `main` in place of `v1.7.1` follows the branch instead, which is useful for
+it. `main` in place of `v1.8.0` follows the branch instead, which is useful for
 testing a fix and not for leaving in place.
 
 **Use the redirect and the scriptlet together.** `filters/gtm.txt` carries the
@@ -376,6 +376,14 @@ before any the page adds and would run before them - and petzl assigns the
 real one from `$(document).ready(function(){ new petzl.controllers.DealerLocator; })`,
 which is one of those. Every listener for that event runs in the one task, so
 a timeout scheduled from ours runs after all of them.
+
+A script that writes into the page is handled the way their own
+`internal.injectHtml` does with `vtp_usePostscribe`: what it writes while it
+runs is caught and inserted where the script sits, and each written `<script>`
+is rebuilt so it actually runs. Without that the write is simply lost, because
+a script appended async runs after parsing, when `document.write` would replace
+the whole document - so browsers ignore it and the tag quietly does nothing.
+hokkaido-np.co.jp's container switches that flag on for exactly this reason.
 
 It waits up to ten seconds, looking every 50ms for the first second - where a
 callback assigned from a ready handler turns up - and every 500ms after that,

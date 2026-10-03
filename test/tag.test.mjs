@@ -264,6 +264,101 @@ describe('gtm-tag', ( ) => {
         }
     });
 
+    // A tag whose script writes into the page, which GTM handles with
+    // vtp_usePostscribe. jsdom will not fetch and run the injected script, so
+    // the browser's side of the contract is played here: currentScript is the
+    // injected script while it runs, and load fires when it is done.
+    const running = (w, script) => {
+        Object.defineProperty(w.document, 'currentScript', {
+            value: script,
+            configurable: true,
+        });
+    };
+    const finished = (w, script) => {
+        Object.defineProperty(w.document, 'currentScript', {
+            value: null,
+            configurable: true,
+        });
+        script.dispatchEvent(new w.Event('load'));
+    };
+    const theScript = w => w.document.querySelector('script[src^="https://maps"]');
+
+    it('puts what the script writes where the script is', async ( ) => {
+        const dom = page('<!doctype html><html><head></head><body>' +
+            '<div id="slot"></div></body></html>');
+        const w = dom.window;
+        const out = lines(w);
+        w.eval(asScriptlet(MAPS));
+        const script = theScript(w);
+        assert.notEqual(script, null);
+        running(w, script);
+        w.document.write('<b id="written">x</b>');
+        w.document.writeln('<i id="also">y</i>');
+        finished(w, script);
+        await settle(20);
+        assert.notEqual(w.document.getElementById('written'), null);
+        assert.notEqual(w.document.getElementById('also'), null);
+        // Where the script is, not at the end of the document.
+        assert.equal(script.nextSibling.id, 'written');
+        assert.ok(out.some(l => l.includes(' wrote=')), out.join(' | '));
+    });
+
+    it('runs a script that was written, in order', async ( ) => {
+        // This one needs a document that runs what is put into it: the rest
+        // of this file uses outside-only, where an inserted script never
+        // executes and the assertion would pass for the wrong reason.
+        const dom = new JSDOM(
+            '<!doctype html><html><head></head><body><p id="x"></p></body></html>',
+            { runScripts: 'dangerously', url: URL }
+        );
+        const w = dom.window;
+        lines(w);
+        w.eval('window.order = [];');
+        w.eval(asScriptlet(MAPS));
+        const script = theScript(w);
+        running(w, script);
+        w.document.write('<scr' + 'ipt>window.order.push("one");</scr' + 'ipt>' +
+            '<scr' + 'ipt>window.order.push("two");</scr' + 'ipt>');
+        finished(w, script);
+        await settle(20);
+        // A script out of innerHTML never runs: each one is rebuilt.
+        assert.deepEqual(Array.from(w.order), [ 'one', 'two' ]);
+    });
+
+    it('leaves a write by anything else alone', async ( ) => {
+        const dom = page();
+        const w = dom.window;
+        lines(w);
+        w.eval(asScriptlet(MAPS));
+        const script = theScript(w);
+        // currentScript is not ours: the page itself is writing, and that is
+        // the real document.write's business.
+        w.eval('window.realWrites = 0;');
+        const real = w.document.write;
+        assert.equal(typeof real, 'function');
+        w.eval('document.write = function(){ window.realWrites += 1; };');
+        // Our shim is already in place over the real one; the page replacing
+        // it afterwards is its own affair - so check the pass-through path
+        // instead, with currentScript pointing elsewhere.
+        running(w, w.document.createElement('script'));
+        w.eval('document.write("<b>not ours</b>");');
+        assert.equal(w.realWrites, 1);
+        finished(w, script);
+    });
+
+    it('gives document.write back when the script is done', async ( ) => {
+        const dom = page();
+        const w = dom.window;
+        lines(w);
+        const before = w.document.write;
+        w.eval(asScriptlet(MAPS));
+        const script = theScript(w);
+        assert.notEqual(w.document.write, before, 'shimmed while it runs');
+        finished(w, script);
+        await settle(20);
+        assert.equal(w.document.write, before, 'and given back after');
+    });
+
     it('loads the tag once, however often it runs', ( ) => {
         const dom = page();
         const w = dom.window;

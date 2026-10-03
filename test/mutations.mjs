@@ -706,6 +706,34 @@ export default [
         to: '',
     },
     {
+        label: 'tag: a write by anything else is caught too',
+        file: TAG,
+        from: '                    if ( doc.currentScript !== script ) {\n' +
+            '                        return write.apply(doc, arguments);\n' +
+            '                    }',
+        to: '',
+    },
+    {
+        label: 'tag: document.write is never given back',
+        file: TAG,
+        from: '                doc.write = write;\n' +
+            '                doc.writeln = writeln;',
+        to: '',
+    },
+    {
+        label: 'tag: a written script is inserted as it was parsed',
+        file: TAG,
+        from: '                if ( node.nodeType === 1 && node.localName === ' +
+            "'script' ) {",
+        to: '                if ( false ) {',
+    },
+    {
+        label: 'tag: what was written goes nowhere',
+        file: TAG,
+        from: '                const count = put(html, script);',
+        to: '                const count = 0;',
+    },
+    {
         label: 'tag: no url at all is loaded as a url',
         file: TAG,
         from: '    if ( given(url) === false ) { return; }',

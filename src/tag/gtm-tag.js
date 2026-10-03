@@ -55,6 +55,12 @@
     a site, and a tag meant for one page would load on all of them.
     tools/tags.mjs reads the trigger out of a container and writes the line.
 
+    A script that writes into the page is handled the way their own injectHtml
+    does with vtp_usePostscribe: what it writes while it runs is caught and
+    put where the script sits, because a script appended async runs after
+    parsing and a document.write then would replace the whole document, so
+    browsers ignore it.
+
     Only https is accepted, and only as a scriptlet: used as a redirect the
     placeholders are never filled in, and this does nothing at all.
 
@@ -163,6 +169,99 @@ function consentRRGtmTag(url = '', needs = '', when = '') {
 
     const id = MARKER + '-' + wanted.href;
 
+    // A tag whose script writes into the page. GTM's own injectHtml has a
+    // path for this - vtp_usePostscribe, which tag 148 of hokkaido-np.co.jp's
+    // container switches on because b-dash's btm.js calls document.write -
+    // and without it the write is lost: a script appended async runs after
+    // parsing, when document.write would replace the whole document, so
+    // browsers ignore it and the tag quietly does nothing.
+    //
+    // So what it writes is caught and put where the script sits, which is
+    // what their postscribe does. Only while that script is the one running:
+    // document.currentScript says so, and anything else writing goes to the
+    // real one untouched.
+    const writtenBy = script => {
+        let held = '';
+        let write = null;
+        let writeln = null;
+        try {
+            write = doc.write;
+            writeln = doc.writeln;
+            const catchIt = function( ) {
+                try {
+                    if ( doc.currentScript !== script ) {
+                        return write.apply(doc, arguments);
+                    }
+                } catch(ex) {
+                }
+                held += [].join.call(arguments, '');
+                return undefined;
+            };
+            doc.write = catchIt;
+            doc.writeln = function( ) {
+                catchIt.apply(doc, arguments);
+                held += '\n';
+                return undefined;
+            };
+        } catch(ex) {
+            return null;
+        }
+        return ( ) => {
+            try {
+                doc.write = write;
+                doc.writeln = writeln;
+            } catch(ex) {
+            }
+            return held;
+        };
+    };
+
+    // Their markup, where their script stood. A script element out of
+    // innerHTML never runs - it is marked already-started - so each one is
+    // rebuilt, in order, the way their executor rebuilds a text/gtmscript.
+    const put = (html, after) => {
+        let holder = null;
+        try {
+            holder = doc.createElement('template');
+            holder.innerHTML = html;
+        } catch(ex) {
+            return 0;
+        }
+        const parent = after.parentNode || doc.head || doc.documentElement;
+        if ( parent === null ) { return 0; }
+        const at = after.nextSibling;
+        const content = holder.content !== undefined ? holder.content : holder;
+        const nodes = [];
+        try {
+            while ( content.firstChild !== null ) {
+                const node = content.firstChild;
+                content.removeChild(node);
+                nodes.push(node);
+            }
+        } catch(ex) {
+            return 0;
+        }
+        let count = 0;
+        for ( const node of nodes ) {
+            let adding = node;
+            try {
+                if ( node.nodeType === 1 && node.localName === 'script' ) {
+                    adding = doc.createElement('script');
+                    for ( const name of node.getAttributeNames() ) {
+                        adding.setAttribute(name, node.getAttribute(name));
+                    }
+                    adding.textContent = node.textContent;
+                    // In the order they were written, as a parser would.
+                    adding.async = false;
+                }
+                parent.insertBefore(adding, at);
+                count += 1;
+            } catch(ex) {
+            }
+        }
+        return count;
+    };
+
     const inject = ( ) => {
         try {
             // Once per url, however many times this runs.
@@ -174,6 +273,19 @@ function consentRRGtmTag(url = '', needs = '', when = '') {
             script.src = wanted.href;
             const where = doc.head || doc.documentElement;
             if ( where === null ) { return false; }
+            const written = writtenBy(script);
+            const settle = ( ) => {
+                if ( written === null ) { return; }
+                const html = written();
+                if ( html === '' ) { return; }
+                const count = put(html, script);
+                say('wrote=' + count + ' from=' + wanted.href);
+            };
+            try {
+                script.addEventListener('load', settle, { once: true });
+                script.addEventListener('error', settle, { once: true });
+            } catch(ex) {
+            }
             where.appendChild(script);
             say('injected=' + wanted.href +
                 (given(needs) ? ' waited=' + needs : '') +
