@@ -46,6 +46,11 @@ jobs:
             echo "::error::committed output is stale - run 'npm test' and commit the result"
             exit 1
           fi
+      # Seconds, and it catches the one thing a shorter mutation run cannot:
+      # a mutation whose anchor no longer matches has stopped testing
+      # anything, which is what a rename in the code it watches does to it.
+      - name: mutation anchors still match
+        run: npm run anchors
       # Every test here is meant to fail against broken code. This proves it,
       # by breaking the code on purpose - see tools/mutate.mjs.
       - run: npm run mutate

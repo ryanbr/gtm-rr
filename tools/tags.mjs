@@ -224,7 +224,9 @@ const tagsFrom = text => {
                 const url = one[1];
                 const fromScriptEl = re.source.startsWith('\\.src') === false ||
                     /createElement\(\\?["']script/i.test(html);
-                if ( fromScriptEl && isWholeUrl(url) ) { urls.push(url); }
+                if ( fromScriptEl && isWholeUrl(url) ) {
+                    urls.push(asHttps(url));
+                }
                 one = re.exec(html);
             }
         }
@@ -285,13 +287,22 @@ const KNOWN_TRACKERS = [
     'hotjar.com', 'criteo', 'taboola.com', 'outbrain.com', 'quantserve.com',
     'scorecardresearch.com', 'adnxs.com', 'pinterest', 'tiktok',
     'snapchat.com', 'sc-static.net', 'reddit.com', 'cct.google',
+    'smartnews-ads.com', 'ads-twitter.com', 'ytag.js',
 ];
 
 // A src built from variables reads as its first literal piece, which can be
 // just a scheme: shonenjumpplus's Treasure Data tag is
 //   a.src = ("https:" === location.protocol ? "https:" : "http:") + "//cdn..."
 // and that is not a url anyone can put in a filter.
-const isWholeUrl = url => /^https?:\/\/[^/\s]+\./.test(url);
+const isWholeUrl = url =>
+    /^(?:https?:)?\/\/[^/\s]+\.[a-z]{2,}/i.test(url);
+
+// A protocol-relative src is a whole url with the scheme left to the page.
+// Missing these cost an evening: hokkaido-np.co.jp's container injects
+// //cdn.activity.smart-bdash.com/tag-manager/bd-7verxz/btm.js, which is what
+// loads their recommendation widget, and the tool reported the container as
+// injecting nothing but an ad pixel.
+const asHttps = url => url.startsWith('//') ? 'https:' + url : url;
 
 const looksLikeTracker = url => {
     for ( const host of KNOWN_TRACKERS ) {

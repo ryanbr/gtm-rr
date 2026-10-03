@@ -19,6 +19,7 @@
     "build": "node tools/build.mjs",
     "test": "node tools/build.mjs && node --test --test-timeout=15000 test/*.test.mjs",
     "mutate": "node tools/mutate.mjs",
+    "anchors": "node tools/mutate.mjs --anchors",
     "tags": "node tools/tags.mjs"
   },
   "devDependencies": {

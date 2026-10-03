@@ -270,6 +270,15 @@ mutation at a time, and checks the suite notices.
   you add - `{ label, file, from, to }`, where `from` must match its file
   exactly once or the mutation is reported `stale` rather than skipped. CI runs
   it, so a test that proves nothing fails the build.
+- **`npm run anchors` is the cheap half of the harness**: it checks that every
+  mutation's `from` still matches its file exactly once, in about a second, and
+  nothing else. A rename in the code a mutation watches leaves it matching
+  nothing, so it tests nothing and says nothing - and that is precisely when
+  the mutation mattered. CI runs it before the mutations for that reason. It
+  reports an anchor as *unanswerable* rather than stale when the file has
+  uncommitted changes, because a mutation run in progress keeps one line broken
+  at a time and would otherwise make the check lie - which it did, twice, while
+  being written.
 - A surviving mutation is not automatically a missing test: check it really
   disabled the behaviour. One that cannot - an expression whose result is
   caught and discarded either way - belongs in the manifest as
