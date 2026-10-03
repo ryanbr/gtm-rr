@@ -221,6 +221,22 @@ describe('googletagmanager_gtm, the page\'s own templates', ( ) => {
         assert.equal(said(out, 'container=').length, 1, out.join(' | '));
     });
 
+    it('does nothing at all when uBO calls it with no arguments',
+    async ( ) => {
+        // Which is every page the global filter covers. Without the guard
+        // this goes looking with an empty selector, and querySelectorAll('')
+        // throws - once every 50ms for ten seconds, into the console.
+        const dom = page(SHAPE);
+        const w = dom.window;
+        const out = lines(w);
+        w.eval(withArgs());
+        await settle(300);
+        assert.equal(said(out, 'refused=').length, 0, out.join(' | '));
+        assert.equal(said(out, 'none=').length, 0, out.join(' | '));
+        assert.equal(said(out, 'ran=').length, 0, out.join(' | '));
+        assert.equal(filled(w), 0);
+    });
+
     it('says on the console what it did', async ( ) => {
         const dom = page(SHAPE);
         const w = dom.window;
