@@ -103,8 +103,22 @@
 ! the ones that are plainly ad or analytics infrastructure, and prints a
 ! ready-made line for each of the rest. Most containers have none: of three
 ! real ones, two injected nothing but pixels.
+!
+! A chain counts as one tag. www.hokkaido-np.co.jp's "あなたにオススメ" slider is
+! four steps deep behind the single script GTM-MZB2Z66 injects: btm.js loads
+! ai_recommend.js, which waits for window.edirium_rec from
+! *.rec.edirium.co.jp/scripts/recommender.js, asks b-dash for its campaigns,
+! and evals the render callback they carry - and that callback is what builds
+! the slides and fires aiRecommendGenerated. Naming the head of the chain
+! starts all of it. Measured in Chrome against the live page: without the
+! line the slider has no children, with it three.
+!
+! Only the tracking leg of that chain is on a list
+! (||smart-bdash.com/tracking-script/ keeps bdash_log.js out, and it stays
+! out), so this brings the recommendations back without b-dash's logging.
 ! -----------------------------------------------------------------------------
 example.com##+js(gtm-tag, https://host.example/thing.js)
+www.hokkaido-np.co.jp##+js(gtm-tag, https://cdn.activity.smart-bdash.com/tag-manager/bd-7verxz/btm.js)
 
 ! -----------------------------------------------------------------------------
 ! Where a container's job was to write into the page rather than to load

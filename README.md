@@ -535,9 +535,36 @@ deciding instead of a rule guessing.
 
 It ends the wait; it cannot produce what the page was waiting **for**. On
 hokkaido-np.co.jp the spinner goes and the slider is empty, because the
-recommendations themselves come from the vendor chain. If you would rather not
-see the empty area, hide it: `hokkaido-np.co.jp##.ai-recommend-spinner-overlay`
-and the section around it.
+recommendations themselves come from the vendor chain.
+
+**If you want the slider filled rather than the spinner gone, one `gtm-tag`
+line does it** - the chain is startable, and only its tracking leg is on a
+list:
+
+```
+www.hokkaido-np.co.jp##+js(gtm-tag, https://cdn.activity.smart-bdash.com/tag-manager/bd-7verxz/btm.js)
+```
+
+That is the one script their container injected, and it starts all of it:
+`btm.js` loads `ai_recommend.js`, which waits for `window.edirium_rec` from
+`*.rec.edirium.co.jp/scripts/recommender.js`, asks b-dash for the campaigns,
+and `eval`s the render callback those carry - which is the code that builds
+the slides and dispatches `aiRecommendGenerated`. Nothing on this side can
+stand in for that callback: it is not in any script, it arrives as campaign
+data.
+
+Measured in Chrome against the live page, `gtm.js` replaced by this resource
+and EasyPrivacy's smart-bdash rules left on:
+
+| | `#ai_recommend_section` | spinner | requests |
+|---|---|---|---|
+| the redirect alone | 0 children | removed, by the wait-finder above | nothing in the chain asked for |
+| plus the line above | **3 article slides** | removed by *their* callback | `btm.js` once, each step once |
+
+`||smart-bdash.com/tracking-script/` keeps `bdash_log.js` out throughout, so
+the recommendations come back without b-dash's logging. The rest of the chain
+is on no list at all. If you would rather have neither, hide the area instead:
+`hokkaido-np.co.jp##.ai-recommend-spinner-overlay` and the section around it.
 
 **And sometimes the container is not loading a tag at all - it is running the
 site's logic.** b2c.voegol.com.br's login page, where the redirect to their
