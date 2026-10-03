@@ -161,6 +161,22 @@ tag's url goes in the filter and only that one script loads.
   whatever was stored there and the guard is lost. That has been got wrong
   twice in this repo.
 
+## One file, several resources
+
+`dist/gtm-rr-all.js` is every resource in one file, for a single
+`userResourcesLocation` URL. A resources file holds as many as it likes, each
+starting at its own `/// name.js` and ending at a blank line - the same shape
+uBO builds anyway when it joins several URLs with `'\n\n'`. **Nothing is
+merged**: the resources keep their own names and versions, and a scriptlet asks
+for one by name.
+
+Merging the *code* instead - folding `gtm-tag` into `googletagmanager_gtm` - was
+considered and is a trap: uBO names a resource after its **first** function, so
+`+js(googletagmanager_gtm, <url>, ...)` would call `consentRRGtmCore(options)`
+with a string where it wants its options object, and the two entry points would
+have to tell themselves apart at runtime. See the next section for why that
+class of thing is expensive.
+
 ## How uBO delivers a scriptlet's arguments
 
 **It calls your function with them.** `lookupScriptlet` reads a name off the

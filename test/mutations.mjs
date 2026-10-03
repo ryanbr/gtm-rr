@@ -15,6 +15,9 @@ const CORE = 'src/shared/lib/core.js';
 const GTM = 'src/gtm/lib/gtm-core.js';
 const GA = 'src/ga/lib/ga-optout-core.js';
 const TAG = 'src/tag/gtm-tag.js';
+// The build too: what it emits is what ships, so the one-file delivery is
+// worth the same treatment as the resources in it.
+const BUILD = 'tools/build.mjs';
 
 export default [
 
@@ -539,6 +542,18 @@ export default [
     },
 
     // The one-tag loader, where the url comes from the filter.
+    {
+        label: 'bundle: a resource is left out of the one-file delivery',
+        file: BUILD,
+        from: '        bundled.push(file);',
+        to: '',
+    },
+    {
+        label: 'bundle: the resources run together with no blank line',
+        file: BUILD,
+        from: "    const bundle = bundled.join('\\n');",
+        to: "    const bundle = bundled.join('');",
+    },
     {
         label: 'tag: no url at all is loaded as a url',
         file: TAG,

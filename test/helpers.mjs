@@ -61,13 +61,26 @@ export const parseResources = text => {
     return resources;
 };
 
+// The one-file delivery, which carries copies of all of the others. Read on
+// its own by the test that checks it, and kept out of the rest so a resource
+// is not loaded twice.
+export const BUNDLE = 'gtm-rr-all.js';
+
 export const loadResources = async ( ) => {
     const dir = path.join(root, 'dist');
-    const names = (await fs.readdir(dir)).filter(n => n.endsWith('.js')).sort();
+    const names = (await fs.readdir(dir))
+        .filter(n => n.endsWith('.js') && n !== BUNDLE)
+        .sort();
     const files = await Promise.all(
         names.map(name => fs.readFile(path.join(dir, name), 'utf8'))
     );
     return parseResources(files.join('\n\n'));
+};
+
+// Everything the bundle holds, parsed with the same rules.
+export const loadBundle = async ( ) => {
+    const text = await fs.readFile(path.join(root, 'dist', BUNDLE), 'utf8');
+    return parseResources(text);
 };
 
 export const fixture = `<!DOCTYPE html><html><head>

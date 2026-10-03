@@ -42,11 +42,20 @@ is one setting on **one line**: the name, then every URL you want, separated
 by spaces.
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.3.1/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.3.1/dist/ga-optout.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.3.1/dist/gtm-tag.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.4.0/dist/gtm-rr-all.js
 ```
 
-Those are the three resources: `googletagmanager_gtm.js`, `ga-optout.js` and
-`gtm-tag.js`.
+**One URL carries all three.** A resources file holds as many resources as it
+likes, each starting at its own `/// name.js`, so `dist/gtm-rr-all.js` delivers
+`googletagmanager_gtm.js`, `ga-optout.js` and `gtm-tag.js` under their own
+names - nothing is merged, and a filter asks for one by name as before. It is
+built from the same files and the tests check it holds them unchanged.
+
+To install only some of them, name those instead - still on the one line:
+
+```
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.4.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.4.0/dist/gtm-tag.js
+```
 
 **One URL per line does not work, and fails quietly.** uBO reads a hidden
 setting as a name and then the rest of *that* line (`/^\s*(\S+)\s+(.+)$/`), and
@@ -64,7 +73,7 @@ straight away: the parsed set is cached in a selfie, invalidated on
 reason to pin a tag.
 
 These are pinned to a release, so an install stays where it is until you move
-it. `main` in place of `v1.3.1` follows the branch instead, which is useful for
+it. `main` in place of `v1.4.0` follows the branch instead, which is useful for
 testing a fix and not for leaving in place.
 
 **Use the redirect and the scriptlet together.** `filters/gtm.txt` carries the

@@ -119,13 +119,19 @@ const resolveIncludes = async (file, seen = new Set()) => {
 
 /******************************************************************************/
 
+// Every resource in one file. Named so it cannot collide with a resource:
+// nothing is ever asked for by this name, it is only a delivery.
+const BUNDLE = 'gtm-rr-all.js';
+
 const build = async ( ) => {
     const entries = [];
+    const bundled = [];
     for ( const dirent of await fs.readdir(srcDir, { withFileTypes: true }) ) {
         if ( dirent.isDirectory() === false ) { continue; }
         const family = path.join(srcDir, dirent.name);
         for ( const name of await fs.readdir(family) ) {
             if ( name.endsWith('.js') === false ) { continue; }
+            assert.notEqual(name, BUNDLE, `a resource may not be named ${BUNDLE}`);
             entries.push({
                 name,
                 family: dirent.name,
@@ -183,11 +189,24 @@ const build = async ( ) => {
         new vm.Script(file, { filename: name });
 
         await fs.writeFile(path.join(outDir, name), file, 'utf8');
+        bundled.push(file);
         console.log(
             `  dist/${name}: ${family} ${resourceVersion},` +
             ` ${lines.length} lines, ${file.length} bytes`
         );
     }
+
+    // One file carrying all of them, for a single userResourcesLocation URL.
+    // A resources file holds as many resources as it likes - each starts at
+    // its own "/// name.js" and ends at a blank line, which is exactly how
+    // uBO joins the contents of several URLs anyway (content.join('\n\n')).
+    // Nothing is merged: the resources stay separate, under their own names.
+    const bundle = bundled.join('\n');
+    new vm.Script(bundle, { filename: BUNDLE });
+    await fs.writeFile(path.join(outDir, BUNDLE), bundle, 'utf8');
+    console.log(
+        `  dist/${BUNDLE}: all ${bundled.length}, ${bundle.length} bytes`
+    );
 };
 
 await build();
