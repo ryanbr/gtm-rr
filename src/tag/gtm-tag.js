@@ -18,16 +18,19 @@
 
       example.com##+js(gtm-tag, https://host/thing.js)
 
-    uBO fills in the placeholder below from the filter's arguments, by
-    position:
+    The filter's arguments arrive as this function's parameters. uBO decides
+    that by looking at how the resource starts:
 
-      patchScriptlet = (fname, content, arglist) => { ...
-          for ( let i = 0; i < arglist.length; i++ ) {
-              content = content.replace("{{" + (i+1) + "}}", arglist[i]);
-          } ... }
+      const match = /^function\s+([^(\s]+)\s*\(/.exec(details.js);
+      const fname = match && match[1];
+      ... if ( fname ) { content = fname + "({{args}});" }
+          else { ...content.replace("{{" + (i+1) + "}}", arglist[i])... }
 
-    (their line builds that placeholder with a template literal; written out
-    here because this file may not contain one - the bundler strips lines.)
+    so a resource whose body opens with a named function declaration - this
+    one does - is CALLED with the arguments, and the {{1}} placeholders of
+    the older form are never filled in. Getting that backwards is silent in
+    both directions: the placeholders stay as literal text and the resource
+    quietly does nothing.
 
     A second argument names a global the tag needs before it runs. A Maps
     loader asked for with &callback=initGmaps will throw if it arrives before
@@ -61,7 +64,7 @@
 
 */
 
-function consentRRGtmTag() {
+function consentRRGtmTag(url = '', needs = '', when = '') {
     const w = window;
     const doc = w.document;
     const VERSION = '@@VERSION@@';
@@ -70,14 +73,8 @@ function consentRRGtmTag() {
     // is hoisted over whatever was stored there and the guard is lost. That
     // has been got wrong twice in this repo now.
     const MARKER = 'consentRRGtmTagLoaded';
-    // Filled in by uBO from the filter's arguments. Left as they are, this
-    // was used without arguments - or as a redirect, which it is not for.
-    const url = '{{1}}';
-    const needs = '{{2}}';
-    const when = '{{3}}';
 
-    const unfilled = value => /^\{\{\d+\}\}$/.test(value);
-    const given = value => unfilled(value) === false && value !== '';
+    const given = value => typeof value === 'string' && value !== '';
 
     const say = what => {
         try {
@@ -86,7 +83,9 @@ function consentRRGtmTag() {
         }
     };
 
-    if ( unfilled(url) || url === '' ) { return; }
+    // No url: used without arguments, or served as a redirect, which this
+    // is not for.
+    if ( given(url) === false ) { return; }
 
     // A third argument is the trigger: Key=substring, tested against the
     // page's data layer, which is where a container reads a condition like

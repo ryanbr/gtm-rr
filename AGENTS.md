@@ -161,6 +161,37 @@ tag's url goes in the filter and only that one script loads.
   whatever was stored there and the guard is lost. That has been got wrong
   twice in this repo.
 
+## How uBO delivers a scriptlet's arguments
+
+**It calls your function with them.** `lookupScriptlet` reads a name off the
+front of the resource and, if it finds one, the per-filter code becomes a call:
+
+```js
+const match = /^function\s+([^(\s]+)\s*\(/.exec(details.js);
+const fname = match && match[1];
+if ( fname ) { content = fname + '({{args}});'; }
+else { for (...) content = content.replace('{{'+(i+1)+'}}', arglist[i]); }
+```
+
+So a resource that opens with a named function declaration - all three here do
+- never has its `{{1}}` placeholders filled in. `gtm-tag` shipped for two
+releases taking its url from `'{{1}}'`, which in a browser is the literal text
+`{{1}}`: the first thing it does is see no url and return, and it has nothing
+to say about that, so the console was empty and the tag never loaded.
+
+Two things follow:
+
+- The whole resource is injected **and** the call is appended, so the
+  resource's own trailing call runs first, with no arguments. Write the
+  function to do nothing when called that way: `consentRRGtmCore(options)`
+  threw on `options.paths` and uBO swallowed it, leaving a real exception in
+  the way of the next person debugging.
+- **A test helper that fills in the placeholders itself tests a contract uBO
+  does not use.** That is how this got through: 21 tests passed against a
+  resource that does nothing in a browser. `test/tag.test.mjs` now takes the
+  same branch uBO takes, by running uBO's own regex, and one test pins the
+  contract itself - a named function at the front, and no `{{n}}` anywhere.
+
 ## Testing
 
 `npm test` builds, then runs the suite **against `dist/`**, parsed with uBO's

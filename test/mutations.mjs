@@ -540,9 +540,9 @@ export default [
 
     // The one-tag loader, where the url comes from the filter.
     {
-        label: 'tag: a placeholder is loaded as a url',
+        label: 'tag: no url at all is loaded as a url',
         file: TAG,
-        from: "    if ( unfilled(url) || url === '' ) { return; }",
+        from: '    if ( given(url) === false ) { return; }',
         to: '',
     },
     {

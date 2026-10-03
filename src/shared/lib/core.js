@@ -110,6 +110,13 @@
 */
 
 function consentRRGtmCore(options) {
+    // uBO calls a resource that opens with a named function declaration, with
+    // whatever arguments the filter gave - and +js(googletagmanager_gtm)
+    // gives none. The call that matters is the one at the foot of the built
+    // resource, which passes these. Without this the no-argument call throws
+    // on options.paths and uBO swallows it, which is a real exception sitting
+    // in the way of whoever debugs this next.
+    if ( options === undefined ) { return; }
     const w = window;
     const doc = w.document;
     const VERSION = '@@VERSION@@';

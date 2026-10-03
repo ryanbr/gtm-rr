@@ -21,15 +21,32 @@ before(async ( ) => {
     tag = (await loadResources()).get('gtm-tag.js');
 });
 
-// What uBO does with a user resource used as a scriptlet: fill in the
-// positional placeholders from the filter's arguments.
-//   patchScriptlet: content.replace("{{" + (i+1) + "}}", arglist[i])
+// What uBO does with a user resource used as a scriptlet, from its own
+// lookupScriptlet/patchScriptlet (scriptlet-filtering-core.js):
+//
+//   const match = /^function\s+([^(\s]+)\s*\(/.exec(details.js);
+//   const fname = match && match[1];
+//   if ( fname ) { content = fname + '({{args}});' }
+//   else { for (...) content = content.replace('{{'+(i+1)+'}}', arglist[i]) }
+//   content.replace('{{args}}', JSON.stringify(arglist).slice(1,-1)...)
+//
+// and the resource itself is injected too, so its own trailing call runs
+// first, with no arguments. Both branches are here because which one uBO
+// takes depends on how the resource starts - and a helper that guesses that
+// wrong tests a contract uBO does not use. This one did, and every argument
+// test in this file passed against a resource that does nothing in a
+// browser.
 const asScriptlet = (...args) => {
-    let out = tag;
-    for ( let i = 0; i < args.length; i += 1 ) {
-        out = out.replace('{{' + (i + 1) + '}}', args[i]);
+    const match = /^function\s+([^(\s]+)\s*\(/.exec(tag);
+    if ( match === null ) {
+        let out = tag;
+        for ( let i = 0; i < args.length; i += 1 ) {
+            out = out.replace('{{' + (i + 1) + '}}', args[i]);
+        }
+        return out;
     }
-    return out;
+    return tag + '\n' + match[1] +
+        '(' + JSON.stringify(args).slice(1, -1) + ');';
 };
 
 const page = (html, url = URL) => new JSDOM(
@@ -49,6 +66,18 @@ const injected = w => Array.from(w.document.querySelectorAll('script[src]'))
 /******************************************************************************/
 
 describe('gtm-tag', ( ) => {
+    it('is delivered the way uBO delivers it', ( ) => {
+        // The contract this resource lives or dies by: uBO reads the name off
+        // the front of the resource and CALLS it with the filter's arguments.
+        // A resource that instead expects {{1}} to have been substituted sees
+        // the placeholder as literal text and does nothing, silently.
+        const match = /^function\s+([^(\s]+)\s*\(/.exec(tag);
+        assert.notEqual(match, null, 'uBO finds no function name here');
+        assert.equal(match[1], 'consentRRGtmTag');
+        assert.equal(/\{\{\d+\}\}/.test(tag), false,
+            'a placeholder left in a resource uBO calls is dead text');
+    });
+
     it('ships as one resource, in the format uBO parses', ( ) => {
         for ( const line of tag.split('\n') ) {
             assert.notEqual(line.trim(), '');
