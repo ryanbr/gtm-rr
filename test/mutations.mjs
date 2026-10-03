@@ -555,6 +555,26 @@ export default [
         to: "    const bundle = bundled.join('');",
     },
     {
+        label: 'gtag: a command callback is not looked for',
+        file: CORE,
+        from: "            if ( item[0] !== 'event' ) { return null; }",
+        to: "            if ( item[0] !== 'nothing-is-this' ) { return null; }",
+    },
+    {
+        label: 'gtag: any command shape is answered',
+        file: CORE,
+        from: '            if ( item.length !== 3 ) { return null; }\n' +
+            "            if ( item[0] !== 'event' ) { return null; }\n" +
+            "            if ( typeof item[1] !== 'string' ) { return null; }",
+        to: '',
+    },
+    {
+        label: 'gtag: the callback is answered more than once',
+        file: CORE,
+        from: '                holder[field] = guard;',
+        to: '',
+    },
+    {
         label: 'templates: run without a filter asking for them',
         file: GTM,
         from: "    if ( from !== 'self' ) {\n" +

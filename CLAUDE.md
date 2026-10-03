@@ -10,6 +10,11 @@ The ones that break things silently, with no error anywhere:
 - `+js(gtm-neutered)` takes **no `.js`**; `redirect=` takes the full
   `gtm-neutered.js`. A wrong token injects nothing and says nothing.
 - `dist/` is committed and is what uBO fetches. Rebuild and commit it.
+- **A page's wait has two spellings.** `eventCallback` on a pushed object, and
+  gtag's `event_callback` **inside the params of `gtag('event', name, {…})`**,
+  which reaches the layer as an arguments object - so it is not a field on
+  what was pushed at all. Miss the second and a site whose links open from it
+  has no working links.
 - **`eventCallback` is a page waiting for an answer.** Miss it and a form
   silently never submits. It is the first thing to check when a page half-works.
 

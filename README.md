@@ -26,7 +26,10 @@ is written against GTM's API and waits for GTM's callbacks:
 
 - `dataLayer.push({ event: 'submit', eventCallback: fn })` is a page waiting to
   be told the event was processed. With nothing there to call `fn`, the form
-  never submits - and nothing errors.
+  never submits - and nothing errors. gtag spells the same thing
+  `gtag('event', name, { event_callback: fn })`, where it sits inside the
+  command's params, and gamelog.apexlegends-leaksnews.com opens every article
+  from one: with nothing to answer it, no link on the page works.
 - `google_tag_manager['GTM-XXXX'].dataLayer.get('page.title')` throws with no
   container registered.
 - `gtm.dom` and `gtm.load` are pushed by GTM itself, and a page's own triggers
@@ -42,7 +45,7 @@ is one setting on **one line**: the name, then every URL you want, separated
 by spaces.
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.5.0/dist/gtm-rr-all.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.6.0/dist/gtm-rr-all.js
 ```
 
 **One URL carries all three.** A resources file holds as many resources as it
@@ -54,7 +57,7 @@ built from the same files and the tests check it holds them unchanged.
 To install only some of them, name those instead - still on the one line:
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.5.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.5.0/dist/gtm-tag.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.6.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.6.0/dist/gtm-tag.js
 ```
 
 **One URL per line does not work, and fails quietly.** uBO reads a hidden
@@ -73,7 +76,7 @@ straight away: the parsed set is cached in a selfie, invalidated on
 reason to pin a tag.
 
 These are pinned to a release, so an install stays where it is until you move
-it. `main` in place of `v1.5.0` follows the branch instead, which is useful for
+it. `main` in place of `v1.6.0` follows the branch instead, which is useful for
 testing a fix and not for leaving in place.
 
 **Use the redirect and the scriptlet together.** `filters/gtm.txt` carries the
@@ -150,6 +153,8 @@ Everything a page can rely on, and where it came from in their own code:
 | `dataLayer.push(obj)` | the array's own `push` return value - the array is the page's and is never replaced |
 | `dataLayer.push({…, eventCallback})` | the callback, on the next tick, applied with itself as `this` and no arguments, as their `k.apply(k, …)` does |
 | `dataLayer.push({…, eventTimeout})` | the same; their timeout is an upper bound and nothing here takes time |
+| `gtag('event', name, {…, event_callback})` | the same answer: gtag's spelling of it, inside the command's params rather than on what was pushed |
+| `gtag('event', name, {…, event_timeout})` | the same; read only so it stays out of the model |
 | `google_tag_manager[id]` | their `RU()` object: `dataLayer`, `bootstrap`, `callback`, and on `gtm.js` only, `onHtmlSuccess` and `onHtmlFailure` |
 | `…[id].bootstrap` | a timestamp, as theirs is once the container has booted - not the `0` it starts at |
 | `…[id].dataLayer.get('a.b')` | their model's dotted-path read, over what the page itself pushed |

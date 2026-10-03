@@ -530,10 +530,58 @@ function consentRRGtmCore(options) {
             }
         };
 
+        // Where a page's wait lives. GTM's is a field on the pushed object.
+        // gtag's is inside the params of a command, under their own name:
+        //
+        //   gtag('event', 'article_click', {
+        //       destination_url: url,
+        //       event_callback: ( ) => { window.open(url, '_blank') },
+        //       event_timeout: 1000
+        //   })
+        //
+        // which reaches the layer as an arguments object, so the field is not
+        // on what was pushed at all. It is the same contract - a page waiting
+        // to be told the event was processed - and the same cost when nobody
+        // answers: on gamelog.apexlegends-leaksnews.com that callback is the
+        // only thing that opens the article, and their own snippet defines
+        // gtag, so the page takes this branch whether a loader arrived or not
+        // and a click does nothing at all.
+        const waiting = item => {
+            try {
+                if ( typeof item.eventCallback === 'function' ) {
+                    return [ item, 'eventCallback' ];
+                }
+            } catch(ex) {
+                return null;
+            }
+            if ( Object.prototype.toString.call(item) !== '[object Arguments]' ) {
+                return null;
+            }
+            // gtag('event', name, params), and only that: a command with no
+            // params has nothing to answer, and the other commands do not
+            // carry a page's callback.
+            if ( item.length !== 3 ) { return null; }
+            if ( item[0] !== 'event' ) { return null; }
+            if ( typeof item[1] !== 'string' ) { return null; }
+            let params = null;
+            try {
+                params = item[2];
+                if ( params === null || typeof params !== 'object' ) { return null; }
+                if ( typeof params.event_callback !== 'function' ) { return null; }
+            } catch(ex) {
+                return null;
+            }
+            return [ params, 'event_callback' ];
+        };
+
         const callBack = item => {
+            const where = waiting(item);
+            if ( where === null ) { return; }
+            const holder = where[0];
+            const field = where[1];
             let callback = null;
             try {
-                callback = item.eventCallback;
+                callback = holder[field];
             } catch(ex) {
                 return;
             }
@@ -560,7 +608,7 @@ function consentRRGtmCore(options) {
                     // passing its own.
                     return callback.apply(callback, arguments);
                 };
-                item.eventCallback = guard;
+                holder[field] = guard;
             } catch(ex) {
                 // A frozen object keeps its own callback; this still answers
                 // once from here.
@@ -579,11 +627,11 @@ function consentRRGtmCore(options) {
                 } catch(ex) {
                 }
             };
-            // eventTimeout is read only to keep it out of the model. Their
-            // timer exists because their tags take time and the callback must
-            // not be lost behind a slow one; nothing here takes any time, so
-            // the next tick is always sooner than any bound a page could ask
-            // for.
+            // eventTimeout, and gtag's event_timeout, are read only to keep
+            // them out of the model. Their timer exists because their tags
+            // take time and the callback must not be lost behind a slow one;
+            // nothing here takes any time, so the next tick is always sooner
+            // than any bound a page could ask for.
             try {
                 w.setTimeout(fire, 0);
                 return;

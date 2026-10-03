@@ -75,6 +75,14 @@ the file's header so the next reader can find them again:
   `{ dataLayer, bootstrap: 0, callback, onHtmlSuccess, onHtmlFailure }`.
 - the model is `dA.R`: `{ name, get, set, reset }`, and `get` walks a dotted
   path.
+- a page's wait has two spellings, and the second is not on the pushed object
+  at all: `gtag('event', name, { event_callback: fn, event_timeout: n })`
+  reaches the layer as an arguments object, with the callback inside the
+  command's params. Field-found on
+  gamelog.apexlegends-leaksnews.com, where every article opens from one:
+  `window.gtag ? gtag('event', 'article_click', { …, event_callback: () =>
+  window.open(link) }) : window.open(link)` - and their own snippet defines
+  `gtag`, so the page takes that branch whether a loader arrived or not.
 - `Do`/`Co` are the `eventCallback` gate: the callback runs when the event's
   tags finish, and `eventTimeout` is only an upper bound - **with no timeout
   there is no timer at all**. A container with no tags has nothing to wait for,
