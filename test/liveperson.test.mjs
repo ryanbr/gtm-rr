@@ -97,15 +97,59 @@ describe('gtm-tag, a loader that cannot start from its own url', ( ) => {
         assert.equal(w.lpTag.site, SITE);
     });
 
-    it('refuses anything that is not an account id', async ( ) => {
-        for ( const site of [ 'medibank', '31780901234567', '31%3B', '' ] ) {
-            const url = 'https://lptag.liveperson.net/tag/tag.js?site=' + site;
+    it('refuses their tag url with no account in it', async ( ) => {
+        // The shorter line a filter author reaches for first. Appending it is
+        // measured broken on their page: tag.js throws on the object it
+        // expected, and the window.lpTag = window.lpTag || {} it opens with
+        // is left behind, so "is lpTag there?" answers yes and the button is
+        // still gone. So this says what is missing instead.
+        for ( const site of [ '', 'medibank', '31780901234567', '31%3B' ] ) {
+            const url = 'https://lptag.liveperson.net/tag/tag.js' +
+                (site !== '' ? '?site=' + site : '');
             const w = page().window;
+            const out = lines(w);
             w.eval(asScriptlet(url));
             await settle(120);
-            assert.equal(w.lpTag, undefined, site);
-            assert.deepEqual(injected(w), [ url ], 'still an ordinary tag');
+            assert.equal(w.lpTag, undefined, url);
+            assert.deepEqual(injected(w), [], 'not appended bare: ' + url);
+            assert.ok(
+                out.some(l => l.includes('refused=site')),
+                url + ' -> ' + out.join(' | ')
+            );
         }
+    });
+
+    it('checks the account the page set, like any other', async ( ) => {
+        // It ends up in a script src, and a page is not a trustworthy place
+        // to read one from without looking. A mutation found this: every
+        // test above seeded a valid id.
+        for ( const site of [ 'medibank', '31780901234567', '31 90', '0' ] ) {
+            const w = page().window;
+            const out = lines(w);
+            w.eval('window.lpTag = { site: ' + JSON.stringify(site) + ' };');
+            w.eval(asScriptlet('https://lptag.liveperson.net/tag/tag.js'));
+            await settle(120);
+            assert.equal(
+                typeof w.lpTag.defer, 'undefined',
+                'nothing built on ' + site
+            );
+            assert.deepEqual(injected(w), [], site);
+            assert.ok(out.some(l => l.includes('refused=site')), site);
+        }
+    });
+
+    it('takes the account off an object the page set itself', async ( ) => {
+        // The other documented way for it to arrive, and the one case where
+        // the url alone is the right filter.
+        const w = page().window;
+        w.eval('window.lpTag = { site: "' + SITE + '" };');
+        w.eval(asScriptlet('https://lptag.liveperson.net/tag/tag.js'));
+        await settle(120);
+        assert.equal(w.lpTag.site, SITE);
+        assert.equal(typeof w.lpTag.defer, 'function', 'and gets the queues');
+        assert.deepEqual(
+            injected(w), [ 'https://lptag.liveperson.net/tag/tag.js' ]
+        );
     });
 
     it('leaves their own opt-out alone', async ( ) => {

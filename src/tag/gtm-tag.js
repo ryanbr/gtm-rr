@@ -348,14 +348,33 @@ function consentRRGtmTag(a1 = '', a2 = '', a3 = '', a4 = '', a5 = '') {
     const LP_HOST = 'liveperson.net';
     const reACCOUNT = /^[0-9]{3,12}$/;
 
-    const lpAccount = ( ) => {
+    const lpTagUrl = ( ) => {
         try {
             const host = String(wanted.hostname);
             if ( host !== LP_HOST && host.endsWith('.' + LP_HOST) === false ) {
-                return '';
+                return false;
             }
-            if ( wanted.pathname !== LP_PATH ) { return ''; }
-            const site = wanted.searchParams.get('site') || '';
+            return wanted.pathname === LP_PATH;
+        } catch(ex) {
+        }
+        return false;
+    };
+
+    const lpAccount = ( ) => {
+        try {
+            const site = String(wanted.searchParams.get('site') || '');
+            return reACCOUNT.test(site) ? site : '';
+        } catch(ex) {
+        }
+        return '';
+    };
+
+    // Failing the url, the object: a page that sets lpTag.site itself is the
+    // other documented way for the account to arrive, and a filter written
+    // without the query string is right on such a page.
+    const lpSeededAccount = ( ) => {
+        try {
+            const site = String((w.lpTag && w.lpTag.site) || '');
             return reACCOUNT.test(site) ? site : '';
         } catch(ex) {
         }
@@ -507,8 +526,18 @@ function consentRRGtmTag(a1 = '', a2 = '', a3 = '', a4 = '', a5 = '') {
 
     // Run before the append, and the answer is whether to go on with it.
     const prepare = ( ) => {
-        const site = lpAccount();
-        if ( site === '' ) { return true; }
+        if ( lpTagUrl() === false ) { return true; }
+        const site = lpAccount() || lpSeededAccount();
+        // Their tag url with no account anywhere. Appending it is measured
+        // broken - tag.js throws on the object it expected and leaves behind
+        // the window.lpTag = window.lpTag || {} it opens with, which then
+        // reads as present to anything that looks - so this refuses instead
+        // and names what is missing. A url is not enough for this one, and a
+        // filter that says nothing about why is a filter nobody can fix.
+        if ( site === '' ) {
+            say('refused=site url=' + wanted.href);
+            return false;
+        }
         // LivePerson's documented way to switch itself off, which a page or a
         // reader can set. Theirs checks it before loading and so does this: a
         // resource that puts back a widget somebody turned off is restoring

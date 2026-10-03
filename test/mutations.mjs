@@ -935,10 +935,20 @@ export default [
         to: '            if ( false ) {',
     },
     {
-        label: 'lp: any site id will do',
+        label: 'lp: any site id in a url will do',
         file: TAG,
-        from: '            return reACCOUNT.test(site) ? site : \'\';',
-        to: "            return site;",
+        from: "            const site = String(wanted.searchParams.get('site') || '');\n" +
+            "            return reACCOUNT.test(site) ? site : '';",
+        to: "            const site = String(wanted.searchParams.get('site') || '');\n" +
+            '            return site;',
+    },
+    {
+        label: 'lp: any site id the page set will do',
+        file: TAG,
+        from: "            const site = String((w.lpTag && w.lpTag.site) || '');\n" +
+            "            return reACCOUNT.test(site) ? site : '';",
+        to: "            const site = String((w.lpTag && w.lpTag.site) || '');\n" +
+            '            return site;',
     },
     {
         label: 'lp: any host will do',
@@ -949,8 +959,20 @@ export default [
     {
         label: 'lp: any path will do',
         file: TAG,
-        from: "            if ( wanted.pathname !== LP_PATH ) { return ''; }",
-        to: '            if ( false ) { return \'\'; }',
+        from: '            return wanted.pathname === LP_PATH;',
+        to: '            return true;',
+    },
+    {
+        label: 'lp: appends their tag with no account to read',
+        file: TAG,
+        from: "            say('refused=site url=' + wanted.href);\n            return false;",
+        to: "            say('refused=site url=' + wanted.href);\n            return true;",
+    },
+    {
+        label: 'lp: ignores an account the page set itself',
+        file: TAG,
+        from: '        const site = lpAccount() || lpSeededAccount();',
+        to: '        const site = lpAccount();',
     },
     {
         label: 'lp: nothing is prepared before the append',

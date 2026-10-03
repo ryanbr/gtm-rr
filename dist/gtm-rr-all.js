@@ -1640,14 +1640,28 @@ function consentRRGtmTag(a1 = '', a2 = '', a3 = '', a4 = '', a5 = '') {
     const LP_PATH = '/tag/tag.js';
     const LP_HOST = 'liveperson.net';
     const reACCOUNT = /^[0-9]{3,12}$/;
-    const lpAccount = ( ) => {
+    const lpTagUrl = ( ) => {
         try {
             const host = String(wanted.hostname);
             if ( host !== LP_HOST && host.endsWith('.' + LP_HOST) === false ) {
-                return '';
+                return false;
             }
-            if ( wanted.pathname !== LP_PATH ) { return ''; }
-            const site = wanted.searchParams.get('site') || '';
+            return wanted.pathname === LP_PATH;
+        } catch(ex) {
+        }
+        return false;
+    };
+    const lpAccount = ( ) => {
+        try {
+            const site = String(wanted.searchParams.get('site') || '');
+            return reACCOUNT.test(site) ? site : '';
+        } catch(ex) {
+        }
+        return '';
+    };
+    const lpSeededAccount = ( ) => {
+        try {
+            const site = String((w.lpTag && w.lpTag.site) || '');
             return reACCOUNT.test(site) ? site : '';
         } catch(ex) {
         }
@@ -1763,8 +1777,12 @@ function consentRRGtmTag(a1 = '', a2 = '', a3 = '', a4 = '', a5 = '') {
         return tag;
     };
     const prepare = ( ) => {
-        const site = lpAccount();
-        if ( site === '' ) { return true; }
+        if ( lpTagUrl() === false ) { return true; }
+        const site = lpAccount() || lpSeededAccount();
+        if ( site === '' ) {
+            say('refused=site url=' + wanted.href);
+            return false;
+        }
         try {
             if ( typeof w._lptStop !== 'undefined' ) {
                 say('refused=_lptStop site=' + site);
