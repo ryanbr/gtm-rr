@@ -760,6 +760,42 @@ undefined and they created the feature as normal. The run of
 `missing=google_tag_manager.*` lines you see before the yield is this resource
 narrating their boot, not breaking it.
 
+## Whether a fix needs a filter at all
+
+The recurring question on every site above is whether the two redirect rules
+can carry it on their own, with nothing site-specific added:
+
+```
+||googletagmanager.com/gtm.js$script,xhr,redirect=googletagmanager_gtm.js:5
+||googletagmanager.com/gtag/js$script,xhr,redirect=googletagmanager_gtm.js:5
+```
+
+The answer turns on one thing: **where the missing piece can be read from.**
+A `redirect=` rule cannot carry a value - there is no syntax for it - so
+anything the fix needs that is not already in the page has to arrive through a
+`+js(...)` filter, whichever resource hosts it.
+
+| what was missing | where it can be read from | filter? |
+|---|---|---|
+| consent categories (globalblue.com's map and banner button) | a fixed set of names - `C0001`, `C0002`, `C0003` | **no** |
+| the name of a wait (hokkaido-np.co.jp's 読み込み中 spinner) | the page's own `addEventListener`, read at runtime | **no** |
+| code the container used to write (shonenjumpplus.com's carousel) | still in the page, inside a `<template>` | **no** |
+| a tag's url (petzl.com's Maps, hokkaido-np.co.jp's slider) | only the container | yes, `gtm-tag` |
+| a tenant id on the element (OneTrust's loader) | only the container | yes, `attr:` |
+| the name of a global a page polls (b2c.voegol.com.br's login) | only the app's own bundle | yes, `stub=` |
+| a vendor account id (medibank.com.au's LivePerson) | only the container | yes, in the url |
+
+So the test to run first, on any new report, is: *is the missing thing a
+constant, or discoverable in the page?* If it is, the redirect can do it alone
+and should. If it is a per-site value that only the container ever held, no
+amount of cleverness in the resource will produce it - and inventing one is
+worse than the breakage, because a guessed account id or device id points a
+visitor at a stranger's service.
+
+Worth knowing: the per-site cases are also the ones that need the resource
+**installed**, so they are not available to uBO Lite, whose built-in resource
+takes no arguments. There, an exception on the container is still the answer.
+
 ## Why an opt-out as well as a stub
 
 A redirect needs a URL to match. Where a site serves the loader from its own
