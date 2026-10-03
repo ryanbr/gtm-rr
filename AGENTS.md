@@ -444,3 +444,16 @@ for minutes), which means a bump pushed without its tag fails the build.
 
 Nothing is published to npm. A `cdn.jsdelivr.net/npm/...` URL would need that,
 so none is offered.
+
+## Reference
+
+[comparison-ubo-adguard.md](comparison-ubo-adguard.md) - uBO's GPT resource
+against AdGuard's, measured rather than read. Kept because it is the nearest
+relative of this resource and because of one transferable rule: **answer input
+you do not implement, rather than throwing at the caller.** Three of uBO's
+methods throw, and a throwing stub is worse than either a noop or the real
+file, since allowing and blocking both leave a page coherent. The TCF
+stand-in here answers an unknown command with `callback(null, false)` for that
+reason.
+
+## Working on it

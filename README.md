@@ -949,6 +949,12 @@ for, and the event is dropped by their own pipeline:
 - Not a stub for `gtag/js`, which is a different loader with its own contract.
   `ga-optout.js` quietens a real one; it does not replace it.
 - Not a way to let a container's tags run. Nothing is fetched or fired.
+- Not a Google Publisher Tag stand-in. GPT is not one of Google's tag manager
+  loaders and uBO already carries a resource of that name.
+  [comparison-ubo-adguard.md](comparison-ubo-adguard.md) measures uBO's against
+  AdGuard's, because it is the nearest relative of what this does and because
+  three of its methods throw where a stub should answer - which is a mistake
+  worth not repeating here.
 
 ## Working on it
 
