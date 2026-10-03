@@ -45,7 +45,7 @@ is one setting on **one line**: the name, then every URL you want, separated
 by spaces.
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.6.0/dist/gtm-rr-all.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.7.0/dist/gtm-rr-all.js
 ```
 
 **One URL carries all three.** A resources file holds as many resources as it
@@ -57,7 +57,7 @@ built from the same files and the tests check it holds them unchanged.
 To install only some of them, name those instead - still on the one line:
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.6.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.6.0/dist/gtm-tag.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.7.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.7.0/dist/gtm-tag.js
 ```
 
 **One URL per line does not work, and fails quietly.** uBO reads a hidden
@@ -76,7 +76,7 @@ straight away: the parsed set is cached in a selfie, invalidated on
 reason to pin a tag.
 
 These are pinned to a release, so an install stays where it is until you move
-it. `main` in place of `v1.6.0` follows the branch instead, which is useful for
+it. `main` in place of `v1.7.0` follows the branch instead, which is useful for
 testing a fix and not for leaving in place.
 
 **Use the redirect and the scriptlet together.** `filters/gtm.txt` carries the
@@ -164,6 +164,7 @@ Everything a page can rely on, and where it came from in their own code:
 | a `gtm.dom` or `gtm.load` trigger | both pushed, once each, as theirs pushes them |
 | `gtag('get', target, field, cb)` | `cb(undefined)`, deferred, as their `RD.get` defers it |
 | `dataLayer.hide.end()` (anti-flicker) | ended their way: own entry cleared, and only ended when no other container is still expected |
+| a page waiting on an event of its own | the event, dispatched at the document and bubbling - but only where the handler looks like the page revealing its own content. See below |
 | `ga(…)` | a noop, which uBO's own resource also puts up - and a better stub is left alone |
 | a renamed data layer (`&l=`) | read off the script's own `src`, with the container id |
 
@@ -411,6 +412,52 @@ tool reports those tags separately, with the elements they write into, because
 the first useful question is whether the page still has them - a container
 often keeps tags for markup the site has moved on from. Theirs target `.gtm-*`
 classes the page no longer carries.
+
+### A wait with a name only the page knows
+
+GTM gives a page three ways to be told the work is done, and this answers all
+three: `eventCallback`, gtag's `event_callback`, and the anti-flicker
+`hide.end()`. A site can hand-roll a fourth, and then the name is the page's
+own. hokkaido-np.co.jp spins a 読み込み中... overlay over its recommendation
+slider and the only thing that takes it away is
+
+```js
+window.addEventListener('aiRecommendGenerated', () => {
+    spinnerOverlay.style.display = 'none';
+    aiRecommendArea.style.height = '100%';
+});
+```
+
+What fires that is three vendors deep inside their container - a Custom HTML
+tag `document.write`s b→dash's `btm.js`, which loads `ai_recommend.js` and
+Edirium's `recommender.js` - so with the container replaced the overlay spins
+for ever. The exception that was being used for it, `@@||googletagmanager.com/
+gtm.js$domain=…`, lets the whole container back in: Facebook, TikTok, Twitter,
+Yahoo, microad, SmartNews, Clarity.
+
+**The redirect alone is enough now.** A page registers what it waits for, so
+the registration is where this looks: it wraps `addEventListener` on the window
+and the document, keeps the names nothing standard fires, and reads the
+handlers. Then it fires only what looks like a page revealing its own content:
+
+| | why |
+|---|---|
+| not a standard DOM event | `click` and `load` are not anyone's cue |
+| the name says nothing about consent, login or payment | `optin` and `consent` are events too, and b→dash's own script on that page dispatches both |
+| every handler mentions a reveal - `display`, `visibility`, `hidden`, `opacity`, `classList`, `.remove()` | the case this is for is a page showing content it already has |
+| and none of them fetches, builds an element, pushes to a data layer, touches cookies or navigates | those are not this resource's to trigger |
+| this stood in for the container | a page whose own container answered is not waiting |
+
+Each one is mutation-tested, and each fires once per page however many copies
+of this resource arrive. Where the rule refuses one it should not, a filter can
+name it - `##+js(googletagmanager_gtm, event=theName)` - which is a person
+deciding instead of a rule guessing.
+
+It ends the wait; it cannot produce what the page was waiting **for**. On
+hokkaido-np.co.jp the spinner goes and the slider is empty, because the
+recommendations themselves come from the vendor chain. If you would rather not
+see the empty area, hide it: `hokkaido-np.co.jp##.ai-recommend-spinner-overlay`
+and the section around it.
 
 **Sometimes the page kept the code itself.** A site that moves that work
 browser-side often leaves the same code in the page, inside an inert

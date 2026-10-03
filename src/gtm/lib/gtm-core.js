@@ -84,10 +84,46 @@
 
 */
 
-function consentRRGtm(selector = '', needs = '', from = '') {
+function consentRRGtm(a1 = '', a2 = '', a3 = '') {
     const w = window;
     const doc = w.document;
     const NAME = 'googletagmanager_gtm';
+
+    // The filter's arguments, named or in the order they were first
+    // documented. Named because there are three of them now and a position is
+    // a poor way to ask for the third:
+    //
+    //   +js(googletagmanager_gtm, template.js-x)
+    //   +js(googletagmanager_gtm, template.js-x, jQuery)
+    //   +js(googletagmanager_gtm, event=aiRecommendGenerated)
+    //   +js(googletagmanager_gtm, template=template.js-x, needs=jQuery)
+    //
+    // A selector can hold an '=' of its own - template[data-x="y"] - so only
+    // these four keys count as named, and anything else falls through to the
+    // position it was given in.
+    const given = {};
+    // A position kept is a position: an argument left empty does not move the
+    // ones after it along, which is how the call this file makes itself -
+    // three arguments, the first two empty - put 'self' where a selector goes.
+    const loose = [ '', '', '' ];
+    const args = [ a1, a2, a3 ];
+    for ( let i = 0; i < args.length; i += 1 ) {
+        const arg = args[i];
+        if ( typeof arg !== 'string' || arg === '' ) { continue; }
+        const at = arg.indexOf('=');
+        const key = at > 0 ? arg.slice(0, at) : '';
+        if ( key === 'template' || key === 'needs' || key === 'event' ||
+            key === 'from' )
+        {
+            given[key] = arg.slice(at + 1).trim();
+            continue;
+        }
+        loose[i] = arg;
+    }
+    const selector = given.template !== undefined ? given.template : loose[0];
+    const needs = given.needs !== undefined ? given.needs : loose[1];
+    const event = given.event !== undefined ? given.event : '';
+    const from = given.from !== undefined ? given.from : loose[2];
     const VERSION = '@@VERSION@@';
 
     let gaCalls = null;
@@ -175,7 +211,24 @@ function consentRRGtm(selector = '', needs = '', from = '') {
         }
         // Where a real container answered, nothing went missing: its own tags
         // do whatever writing into the page they do.
-        if ( report.installed === 'installed' ) { scan(); }
+        if ( report.installed === 'installed' ) {
+            scan();
+            watchWaits();
+            try {
+                if ( doc.readyState === 'complete' ) {
+                    w.setTimeout(tellWhatWaits, 0);
+                } else {
+                    w.addEventListener('load', ( ) => {
+                        try {
+                            w.setTimeout(tellWhatWaits, 0);
+                        } catch(ex) {
+                            tellWhatWaits();
+                        }
+                    }, { once: true });
+                }
+            } catch(ex) {
+            }
+        }
     };
 
     const say = what => {
@@ -451,8 +504,175 @@ function consentRRGtm(selector = '', needs = '', from = '') {
     // DELIVERY - the redirect landing as well as the scriptlet - has its own
     // copy of this file and so its own self call, which is what reports
     // push=already container=kept.
+    // A page that waits to be told the work is done, where the telling was a
+    // container's job and the name of it is the page's own. GTM has three of
+    // these and this resource answers them all - eventCallback, gtag's
+    // event_callback, and the anti-flicker hide.end() - but a site can
+    // hand-roll a fourth, and then only a filter can say what it is called.
+    //
+    // hokkaido-np.co.jp: the page shows an overlay with 読み込み中... and
+    //   window.addEventListener('aiRecommendGenerated', () => {
+    //       spinnerOverlay.style.display = 'none'; ... })
+    // is the only thing that takes it away. What fires it is three vendors
+    // deep inside their container, so with the container replaced the overlay
+    // spins for ever.
+    //
+    // Dispatched at the document and bubbling, because a listener on window
+    // hears that and a listener on the document does not hear a dispatch at
+    // window. Once, after load, when the page has registered what it is
+    // going to. This ends the wait; it cannot produce what the page was
+    // waiting FOR, so an area filled by a container's vendor stays empty.
+    // On the window, not in here: the redirect landing and the scriptlet
+    // running are two evaluations of this file with a closure each, and a
+    // page's handler should hear its event once however many of us arrive.
+    const TOLD = 'consentRRGtmTold';
+    const fired = new Set();
+
+    const fire = name => {
+        try {
+            if ( w[TOLD] === undefined ) { w[TOLD] = {}; }
+            if ( w[TOLD][name] === true ) { return false; }
+            w[TOLD][name] = true;
+        } catch(ex) {
+            if ( fired.has(name) ) { return false; }
+            fired.add(name);
+        }
+        try {
+            let ev = null;
+            try {
+                ev = new w.CustomEvent(name, {
+                    bubbles: true,
+                    cancelable: true,
+                    detail: { consentRRGtm: VERSION },
+                });
+            } catch(ex) {
+                ev = doc.createEvent('CustomEvent');
+                ev.initCustomEvent(name, true, true, null);
+            }
+            doc.dispatchEvent(ev);
+            return true;
+        } catch(ex) {
+        }
+        return false;
+    };
+
+    const tell = ( ) => {
+        say((fire(event) ? 'told=' : 'could-not-tell=') + event);
+    };
+
+    // With no filter to name it, the event has to be found. A page registers
+    // what it is waiting for, so the registration is where to look: this
+    // wraps addEventListener on the window and the document, keeps the names
+    // nothing standard fires, and reads the handlers.
+    //
+    // Then it fires only the ones that look like a page revealing its own
+    // content. Firing whatever a page listens for would be reckless - 'optin'
+    // and 'consent' are events too, and b-dash's own script on the page that
+    // led to this dispatches both - so a name or a handler that looks like
+    // consent, tracking or loading is left alone. The filter form
+    // (event=name) stays for the ones this refuses.
+    const STANDARD = new Set([
+        'click', 'dblclick', 'mousedown', 'mouseup', 'mousemove', 'mouseover',
+        'mouseout', 'mouseenter', 'mouseleave', 'contextmenu', 'wheel',
+        'keydown', 'keyup', 'keypress', 'input', 'change', 'submit', 'reset',
+        'focus', 'blur', 'focusin', 'focusout', 'scroll', 'resize', 'load',
+        'unload', 'beforeunload', 'pagehide', 'pageshow', 'popstate',
+        'hashchange', 'DOMContentLoaded', 'readystatechange', 'visibilitychange',
+        'touchstart', 'touchend', 'touchmove', 'touchcancel', 'pointerdown',
+        'pointerup', 'pointermove', 'pointerover', 'pointerout', 'drag',
+        'dragstart', 'dragend', 'dragover', 'drop', 'copy', 'cut', 'paste',
+        'play', 'pause', 'ended', 'timeupdate', 'error', 'abort', 'online',
+        'offline', 'message', 'storage', 'animationend', 'transitionend',
+    ]);
+    // What a handler that reveals the page's own content does.
+    const reREVEAL = /display|visibility|hidden|opacity|classList|\.remove\(/i;
+    // And what one that does something this has no business triggering does.
+    const reKEEPOUT =
+        /fetch\(|XMLHttpRequest|createElement|\.src\s*=|dataLayer|gtag\(|consent|optin|optout|cookie|localStorage|\.submit\(|location\s*=|location\.(?:href|assign|replace)/i;
+    // A name is a clue of its own.
+    const reNAMEOUT =
+        /consent|optin|optout|cmp|gdpr|ccpa|accept|cookie|login|logout|signin|signup|purchase|checkout|order|submit|pay/i;
+
+    const heard = new Map();
+
+    const noteWait = (type, listener) => {
+        if ( typeof type !== 'string' || type === '' ) { return; }
+        if ( STANDARD.has(type) ) { return; }
+        if ( reNAMEOUT.test(type) ) { return; }
+        let source = '';
+        try {
+            source = typeof listener === 'function'
+                ? w.Function.prototype.toString.call(listener)
+                : String((listener && listener.handleEvent) || '');
+        } catch(ex) {
+            return;
+        }
+        const was = heard.get(type) || [];
+        was.push(source);
+        heard.set(type, was);
+    };
+
+    const watchWaits = ( ) => {
+        for ( const target of [ w, doc ] ) {
+            try {
+                const original = target.addEventListener;
+                if ( typeof original !== 'function' ) { continue; }
+                target.addEventListener = function(type, listener, options) {
+                    try {
+                        noteWait(type, listener);
+                    } catch(ex) {
+                    }
+                    return original.call(this, type, listener, options);
+                };
+            } catch(ex) {
+            }
+        }
+    };
+
+    const ours = name => {
+        const sources = heard.get(name) || [];
+        if ( sources.length === 0 ) { return false; }
+        for ( const source of sources ) {
+            if ( reKEEPOUT.test(source) ) { return false; }
+            if ( reREVEAL.test(source) === false ) { return false; }
+        }
+        return true;
+    };
+
+    const tellWhatWaits = ( ) => {
+        let told = 0;
+        let held = 0;
+        for ( const name of heard.keys() ) {
+            if ( ours(name) === false ) {
+                held += 1;
+                continue;
+            }
+            fire(name);
+            told += 1;
+        }
+        if ( told === 0 ) { return; }
+        say('told=' + told + (held !== 0 ? ' held=' + held : '') +
+            ' from=page');
+    };
+
+    const telling = ( ) => {
+        const soon = ( ) => {
+            try {
+                w.setTimeout(tell, 0);
+            } catch(ex) {
+                tell();
+            }
+        };
+        try {
+            if ( doc.readyState === 'complete' ) { soon(); }
+            else { w.addEventListener('load', soon, { once: true }); }
+        } catch(ex) {
+        }
+    };
+
     if ( from !== 'self' ) {
         if ( selector !== '' ) { templates(); }
+        if ( event !== '' ) { telling(); }
         return;
     }
 

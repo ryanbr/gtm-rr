@@ -557,6 +557,45 @@ export default [
         to: "    const bundle = bundled.join('');",
     },
     {
+        label: 'waits: any event a page listens for is fired',
+        file: GTM,
+        from: '        if ( reNAMEOUT.test(type) ) { return; }',
+        to: '',
+    },
+    {
+        label: 'waits: a standard event is fired too',
+        file: GTM,
+        from: '        if ( STANDARD.has(type) ) { return; }',
+        to: '',
+    },
+    {
+        label: 'waits: a handler that does more than reveal is fired',
+        file: GTM,
+        from: '            if ( reKEEPOUT.test(source) ) { return false; }',
+        to: '',
+    },
+    {
+        label: 'waits: a handler that reveals nothing is fired',
+        file: GTM,
+        from: '            if ( reREVEAL.test(source) === false ) { return false; }',
+        to: '',
+    },
+    {
+        label: 'waits: fired again on a second delivery',
+        file: GTM,
+        from: "            if ( w[TOLD][name] === true ) { return false; }",
+        to: '',
+    },
+    {
+        label: 'waits: found on a page this never stood in for',
+        file: GTM,
+        from: '            scan();\n            watchWaits();',
+        to: '            scan();\n            watchWaits();\n            void 0;',
+        equivalent: true,
+        why: 'the gate is one line above and has its own mutation; this only' +
+            ' proves the pair are called together',
+    },
+    {
         label: 'gtag: a command callback is not looked for',
         file: CORE,
         from: "            if ( item[0] !== 'event' ) { return null; }",
@@ -573,22 +612,21 @@ export default [
     {
         label: 'templates: run without a filter asking for them',
         file: GTM,
-        from: "    if ( from !== 'self' ) {\n" +
-            "        if ( selector !== '' ) { templates(); }\n" +
-            '        return;\n    }',
-        to: '    templates();',
+        from: "        if ( selector !== '' ) { templates(); }",
+        to: '        templates();',
     },
     {
         label: 'templates: the resource stands in for the container twice',
         file: 'src/gtm/googletagmanager_gtm.js',
-        from: "consentRRGtm('', '', 'self');",
+        from: "consentRRGtm('from=self');",
         to: 'consentRRGtm();',
     },
     {
         label: 'templates: run on a page this never stood in for',
         file: GTM,
-        from: "        if ( report.installed === 'installed' ) { scan(); }",
-        to: '        scan();',
+        from: "        if ( report.installed === 'installed' ) {\n" +
+            '            scan();',
+        to: '        {\n            scan();',
     },
     {
         label: 'templates: markup in a template is no objection',

@@ -15,4 +15,4 @@
 // 'self' marks the call this file makes on its own behalf, which is the one
 // that stands in for the container. uBO appends its own call per filter, and
 // those only carry out what their arguments ask for.
-consentRRGtm('', '', 'self');
+consentRRGtm('from=self');

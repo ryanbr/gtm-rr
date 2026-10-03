@@ -228,6 +228,28 @@ takes arguments now, which means two rules:
 Both are mutation-tested. The second one fails 54 tests when it is wrong,
 which is the right shape for a contract everything else rests on.
 
+## A page's wait, when the name is the page's own
+
+Three of these are GTM's and this resource answers them all: `eventCallback`,
+gtag's `event_callback`, `hide.end()`. The fourth is hand-rolled, and
+hokkaido-np.co.jp is the worked example - an overlay removed only by a
+`aiRecommendGenerated` listener, fired three vendors deep inside their
+container.
+
+Finding it means wrapping `addEventListener` on the window and the document
+and reading the handlers, which is a lot of rope. The gates are the whole
+argument, and each has a mutation: not a standard event, nothing
+consent-shaped in the name, every handler mentions a reveal, no handler
+fetches or builds an element or pushes to a data layer or navigates, and this
+stood in for the container. `event=name` in a filter overrides the lot.
+
+**The registration order is the thing to get right in a test.** The resource
+runs where the loader was - in the head - and the page registers its listener
+further down the body, so the wrapper is in place first. A fixture that
+registers the listener during jsdom's own parse puts it in place *before* the
+wrapper, and then every negative case passes for nothing. That happened here:
+the positive case failing is what exposed four vacuous ones.
+
 ## How uBO delivers a scriptlet's arguments
 
 **It calls your function with them.** `lookupScriptlet` reads a name off the

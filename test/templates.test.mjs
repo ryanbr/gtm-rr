@@ -327,3 +327,89 @@ describe('filters, templates', ( ) => {
         assert.match(filtersText, /\+js\(googletagmanager_gtm, *template/);
     });
 });
+
+/******************************************************************************/
+
+// A page that waits to be told the work is done, where the telling was a
+// container's job and the name of the telling is the page's own.
+// hokkaido-np.co.jp: an overlay with 読み込み中... and
+//   window.addEventListener('aiRecommendGenerated', () => {
+//       spinnerOverlay.style.display = 'none'; ... })
+// where what fires it is three vendors deep inside their container.
+describe('googletagmanager_gtm, telling a page the wait is over', ( ) => {
+    const SPINNER = '<div class="ai-recommend-spinner-overlay">' +
+        '<p>読み込み中...</p></div>' +
+        '<div class="section_wrap" style="height:220px"></div>' +
+        '<scr' + 'ipt>window.addEventListener("aiRecommendGenerated",' +
+        ' function(){ document.querySelector(".ai-recommend-spinner-overlay")' +
+        '.style.display = "none";' +
+        ' document.querySelector(".section_wrap").style.height = "100%"; });' +
+        '</scr' + 'ipt>';
+
+    const spinning = w => {
+        const overlay = w.document.querySelector('.ai-recommend-spinner-overlay');
+        return overlay !== null && overlay.style.display !== 'none';
+    };
+
+    it('ends a wait a filter names, at the document so both hear it',
+    async ( ) => {
+        const dom = page(SPINNER);
+        const w = dom.window;
+        const out = lines(w);
+        assert.equal(spinning(w), true, 'spinning to begin with');
+        w.eval(withArgs('event=aiRecommendGenerated'));
+        await settle(120);
+        assert.equal(spinning(w), false);
+        assert.equal(w.document.querySelector('.section_wrap').style.height,
+            '100%');
+        assert.ok(said(out, ' told=aiRecommendGenerated').length === 1,
+            out.join(' | '));
+    });
+
+    it('is heard by a listener on the document too', async ( ) => {
+        const dom = page('<div id="x"></div>');
+        const w = dom.window;
+        lines(w);
+        w.eval('window.heard = [];' +
+            'document.addEventListener("someEvent", e => {' +
+            ' window.heard.push("document:" + (e.detail ? "detail" : "bare")); });' +
+            'window.addEventListener("someEvent", () => {' +
+            ' window.heard.push("window"); });');
+        w.eval(withArgs('event=someEvent'));
+        await settle(120);
+        assert.deepEqual(Array.from(w.heard), [ 'document:detail', 'window' ]);
+    });
+
+    it('says nothing and does nothing unless a filter names one', async ( ) => {
+        const dom = page(SPINNER);
+        const w = dom.window;
+        const out = lines(w);
+        w.eval(gtm);
+        await settle(120);
+        assert.equal(spinning(w), true, 'not this resource to guess');
+        assert.equal(said(out, 'told=').length, 0, out.join(' | '));
+    });
+
+    it('tells once, however many filters asked', async ( ) => {
+        const dom = page('<div id="x"></div>');
+        const w = dom.window;
+        lines(w);
+        w.eval('window.count = 0;' +
+            'window.addEventListener("someEvent", () => { window.count += 1; });');
+        w.eval(withArgs('event=someEvent'));
+        await settle(150);
+        assert.equal(w.count, 1);
+    });
+
+    it('takes its arguments named, in any order', async ( ) => {
+        const dom = page(SHAPE + '<div id="x"></div>');
+        const w = dom.window;
+        lines(w);
+        w.eval('window.count = 0;' +
+            'window.addEventListener("someEvent", () => { window.count += 1; });');
+        w.eval(withArgs('event=someEvent', 'template=' + SEL));
+        await settle(150);
+        assert.equal(w.count, 1, 'the event');
+        assert.equal(filled(w), 2, 'and the template, from the same call');
+    });
+});

@@ -105,9 +105,11 @@ const anchors = ( ) => {
         (unsure !== 0 ? `, ${unsure} unanswerable` : ''));
     if ( unsure !== 0 ) {
         console.log('\n  Unanswerable means the file is not as it is' +
-            ' committed - a mutation run in\n  progress is the usual reason,' +
-            ' since it keeps one line broken at a time.\n  Run this on a' +
-            ' clean tree for an answer.');
+            ' committed, so a stale anchor cannot be told\n  apart from a' +
+            ' line that is merely edited. Either the code just changed, and' +
+            '\n  these want re-anchoring, or a mutation run is in progress,' +
+            ' which\n  keeps one line broken at a time. Both have happened' +
+            ' here.');
     }
     if ( bad !== 0 ) {
         console.log('\n  An anchor that does not match is a mutation that' +
