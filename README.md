@@ -45,7 +45,7 @@ is one setting on **one line**: the name, then every URL you want, separated
 by spaces.
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.12.0/dist/gtm-rr-all.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.13.0/dist/gtm-rr-all.js
 ```
 
 **One URL carries all three.** A resources file holds as many resources as it
@@ -57,7 +57,7 @@ built from the same files and the tests check it holds them unchanged.
 To install only some of them, name those instead - still on the one line:
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.12.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.12.0/dist/gtm-tag.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.13.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.13.0/dist/gtm-tag.js
 ```
 
 **One URL per line does not work, and fails quietly.** uBO reads a hidden
@@ -76,7 +76,7 @@ straight away: the parsed set is cached in a selfie, invalidated on
 reason to pin a tag.
 
 These are pinned to a release, so an install stays where it is until you move
-it. `main` in place of `v1.12.0` follows the branch instead, which is useful for
+it. `main` in place of `v1.13.0` follows the branch instead, which is useful for
 testing a fix and not for leaving in place.
 
 **Use the redirect and the scriptlet together.** `filters/gtm.txt` carries the
@@ -358,6 +358,40 @@ This is not decoration. **A scriptlet filter cannot be scoped to a path**, only
 to a domain, so without it the line runs on every page of the site and loads a
 tag meant for one of them everywhere. With it, a page the trigger does not
 match gets nothing at all.
+
+**And often the container's trigger IS the path**, which a data layer
+condition cannot say. shop.moen.com's faucet quiz is the worked example: the
+page carries the mount, `<div id="zoovu-assistant">`, and `GTM-5M3PDQZ8`
+carries the launcher behind
+
+```
+_eq macro 56 /pages/faucet-finder-quiz
+macro 56: {"function":"__u","vtp_component":"PATH"}
+```
+
+so `path=` is that condition, and their four shapes of it map onto one
+argument:
+
+| | their predicate |
+|---|---|
+| `path=/pages/faucet-finder-quiz` | `_eq` |
+| `path=/pages/*` | `_sw` |
+| `path=*/thank-you` | `_ew` |
+| `path=*finder*` | `_cn` |
+
+```
+shop.moen.com##+js(gtm-tag, https://api-barracuda.zoovu.com/api/v1/launchers/mznpQl/moen-faucet-discovery, path=/pages/faucet-finder-quiz)
+```
+
+Measured against the live page: with `gtm.js` replaced `#zoovu-assistant` is
+empty, and with that line it holds the same `zv-advisor` the container
+produces, down to the `data-zoovu-assistant-claimed` attribute. On every other
+page of the shop the line stands down and says which page it was for:
+`skipped=path want=/pages/faucet-finder-quiz`. Only the ends of the value are
+wildcards, so a path with a `*` in the middle is compared as text.
+
+`npm run tags` reads these out of a container and prints the whole filter, so
+a path-triggered tag needs no hand-assembly.
 
 **A tag can need more than a url.** OneTrust's loader carries its tenant on
 the element, and a container's consent manager is the tag a site's content is

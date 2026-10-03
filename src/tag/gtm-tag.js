@@ -122,7 +122,7 @@ function consentRRGtmTag(a1 = '', a2 = '', a3 = '', a4 = '', a5 = '') {
         const at = arg.indexOf('=');
         const key = at > 0 ? arg.slice(0, at) : '';
         if ( key === 'url' || key === 'needs' || key === 'when' ||
-            key === 'campaign' )
+            key === 'campaign' || key === 'path' )
         {
             named[key] = arg.slice(at + 1).trim();
             continue;
@@ -133,6 +133,7 @@ function consentRRGtmTag(a1 = '', a2 = '', a3 = '', a4 = '', a5 = '') {
     const needs = named.needs !== undefined ? named.needs : loose[1];
     const when = named.when !== undefined ? named.when : loose[2];
     const campaign = named.campaign !== undefined ? named.campaign : '';
+    const onPath = named.path !== undefined ? named.path : '';
 
     const say = what => {
         try {
@@ -204,6 +205,54 @@ function consentRRGtmTag(a1 = '', a2 = '', a3 = '', a4 = '', a5 = '') {
         }
         return false;
     };
+
+    // The other kind of trigger a container holds, and the one a filter
+    // cannot express on its own: a path. shop.moen.com's faucet quiz is the
+    // worked example - the page carries the mount, <div id="zoovu-assistant">,
+    // and GTM-5M3PDQZ8 carries the launcher behind
+    //
+    //   _eq macro 56 /pages/faucet-finder-quiz
+    //   macro 56: {"function":"__u","vtp_component":"PATH"}
+    //
+    // so the tag is for that one page. when= cannot say this: it reads the
+    // data layer, and a path is not in it. Without a way to say it the line
+    // runs on every page of a shop and loads a vendor meant for one of them
+    // everywhere, which is the same objection this file already makes about
+    // scriptlet filters not being scopable to a path.
+    //
+    // Their three tests on a path, in one argument:
+    //
+    //   path=/pages/faucet-finder-quiz     their _eq
+    //   path=/pages/*                      their _sw
+    //   path=*/thank-you*                  their _cn
+    //
+    // A '*' at either end is the wildcard and nothing else is, so a path
+    // holding one is matched literally where it has none of its own.
+    const pathMatches = ( ) => {
+        if ( onPath === '' ) { return true; }
+        let here = '';
+        try {
+            here = String(w.location.pathname || '');
+        } catch(ex) {
+            return false;
+        }
+        const from = onPath.startsWith('*');
+        const to = onPath.endsWith('*');
+        const want = onPath.slice(from ? 1 : 0, to ? -1 : undefined);
+        if ( want === '' ) { return true; }
+        if ( from && to ) { return here.indexOf(want) !== -1; }
+        if ( from ) { return here.endsWith(want); }
+        if ( to ) { return here.startsWith(want); }
+        return here === want;
+    };
+
+    if ( pathMatches() === false ) {
+        // Said rather than silent: a filter whose path has a typo in it looks
+        // exactly like a tag that is not for this page, and one line tells
+        // the two apart.
+        say('skipped=path want=' + onPath.slice(0, 80));
+        return;
+    }
 
     // https only: a tag worth loading is served over it, and a filter
     // argument is not a place to accept anything else.

@@ -573,3 +573,91 @@ describe('filters, tag', ( ) => {
         assert.equal(/redirect=gtm-tag/.test(filtersText), false);
     });
 });
+
+/******************************************************************************/
+
+// shop.moen.com/pages/faucet-finder-quiz: the page carries the mount,
+// <div id="zoovu-assistant">, and GTM-5M3PDQZ8 carries the launcher behind
+//   _eq macro 56 /pages/faucet-finder-quiz
+//   macro 56: {"function":"__u","vtp_component":"PATH"}
+// A data layer condition cannot say that, and a scriptlet filter cannot be
+// scoped to a path, so without this the line loads a vendor meant for one
+// page on every page of a shop.
+const QUIZ = 'https://api-barracuda.zoovu.com/api/v1/launchers/mznpQl/x';
+const SHOP = 'https://shop.moen.com/pages/faucet-finder-quiz';
+
+describe('gtm-tag, a trigger on the path', ( ) => {
+    const at = url => page(undefined, url);
+
+    it('loads it on the page the container held it for', async ( ) => {
+        const w = at(SHOP).window;
+        w.eval(asScriptlet(QUIZ, 'path=/pages/faucet-finder-quiz'));
+        await settle(120);
+        assert.deepEqual(injected(w), [ QUIZ ]);
+    });
+
+    it('loads it nowhere else, and says which page it wanted', async ( ) => {
+        const w = at('https://shop.moen.com/').window;
+        const out = lines(w);
+        w.eval(asScriptlet(QUIZ, 'path=/pages/faucet-finder-quiz'));
+        await settle(120);
+        assert.deepEqual(injected(w), []);
+        assert.ok(
+            out.some(l => l.includes('skipped=path want=/pages/faucet-finder-quiz')),
+            out.join(' | ')
+        );
+    });
+
+    it('takes their four shapes of path test', async ( ) => {
+        const cases = [
+            [ '/pages/faucet-finder-quiz', true, 'their _eq' ],
+            [ '/pages/other', false, 'their _eq, elsewhere' ],
+            [ '/pages/*', true, 'their _sw' ],
+            [ '/products/*', false, 'their _sw, elsewhere' ],
+            [ '*-quiz', true, 'their _ew' ],
+            [ '*-finder', false, 'their _ew, elsewhere' ],
+            [ '*finder*', true, 'their _cn' ],
+            [ '*basket*', false, 'their _cn, elsewhere' ],
+            [ '*', true, 'a wildcard on its own' ],
+        ];
+        for ( const [ want, hit, why ] of cases ) {
+            const w = at(SHOP).window;
+            lines(w);
+            w.eval(asScriptlet(QUIZ, 'path=' + want));
+            await settle(120);
+            assert.deepEqual(injected(w), hit ? [ QUIZ ] : [], why + ': ' + want);
+        }
+    });
+
+    it('matches a path holding a star of its own literally', async ( ) => {
+        // Only the ends are wildcards, so this one is compared as text - and
+        // the first version of this test asserted the opposite of its own
+        // comment, which is what the run said.
+        const w = at('https://shop.moen.com/a*b').window;
+        w.eval(asScriptlet(QUIZ, 'path=/a*b'));
+        await settle(120);
+        assert.deepEqual(injected(w), [ QUIZ ], 'a star in the middle is text');
+        const other = at('https://shop.moen.com/ab').window;
+        other.console.info = ( ) => undefined;
+        other.eval(asScriptlet(QUIZ, 'path=/a*b'));
+        await settle(120);
+        assert.deepEqual(
+            injected(other), [],
+            'and it is not standing in for anything either'
+        );
+    });
+
+    it('is read before the url is, so a typo reports the path', async ( ) => {
+        // Both are wrong here. The useful line is the one naming the page,
+        // since a tag for another page is not a tag with a broken url.
+        const w = at('https://shop.moen.com/').window;
+        const out = lines(w);
+        w.eval(asScriptlet('not-a-url', 'path=/pages/faucet-finder-quiz'));
+        await settle(120);
+        assert.ok(out.some(l => l.includes('skipped=path')), out.join(' | '));
+        assert.ok(
+            out.every(l => l.includes('refused=') === false),
+            'and nothing about the url: ' + out.join(' | ')
+        );
+    });
+});

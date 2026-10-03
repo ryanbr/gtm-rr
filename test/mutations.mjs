@@ -1023,11 +1023,50 @@ export default [
         to: '            if ( false ) { return false; }',
     },
     {
+        label: 'tag: path= is not a name, so it lands where when= goes',
+        file: TAG,
+        from: "        if ( key === 'url' || key === 'needs' || key === 'when' ||\n" +
+            "            key === 'campaign' || key === 'path' )",
+        to: "        if ( key === 'url' || key === 'needs' || key === 'when' ||\n" +
+            "            key === 'campaign' )",
+    },
+    {
+        label: 'tag: a path trigger never holds the tag back',
+        file: TAG,
+        from: '    if ( pathMatches() === false ) {',
+        to: '    if ( false ) {',
+    },
+    {
+        label: 'tag: an exact path matches any page',
+        file: TAG,
+        from: '        return here === want;',
+        to: '        return true;',
+    },
+    {
+        label: 'tag: a contains path matches any page',
+        file: TAG,
+        from: "        if ( from && to ) { return here.indexOf(want) !== -1; }",
+        to: '        if ( from && to ) { return true; }',
+    },
+    {
+        label: 'tag: a prefix path matches any page',
+        file: TAG,
+        from: '        if ( to ) { return here.startsWith(want); }',
+        to: '        if ( to ) { return true; }',
+    },
+    {
+        label: 'tag: a suffix path matches any page',
+        file: TAG,
+        from: '        if ( from ) { return here.endsWith(want); }',
+        to: '        if ( from ) { return true; }',
+    },
+    {
         label: 'lp: campaign= is not a name, so it lands where when= goes',
         file: TAG,
         from: "        if ( key === 'url' || key === 'needs' || key === 'when' ||\n" +
-            "            key === 'campaign' )",
-        to: "        if ( key === 'url' || key === 'needs' || key === 'when' )",
+            "            key === 'campaign' || key === 'path' )",
+        to: "        if ( key === 'url' || key === 'needs' || key === 'when' ||\n" +
+            "            key === 'path' )",
     },
     {
         label: 'lp: the targeting SDE is never pushed',

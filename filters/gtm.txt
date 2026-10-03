@@ -121,6 +121,27 @@ example.com##+js(gtm-tag, https://host.example/thing.js)
 www.hokkaido-np.co.jp##+js(gtm-tag, https://cdn.activity.smart-bdash.com/tag-manager/bd-7verxz/btm.js)
 
 ! -----------------------------------------------------------------------------
+! Where the container's trigger is the PATH, which a data layer condition
+! cannot say and a scriptlet filter cannot be scoped to. path= is that
+! condition, and their four shapes of it are one argument:
+!
+!   path=/pages/thing     their _eq
+!   path=/pages/*         their _sw
+!   path=*/thank-you      their _ew
+!   path=*thing*          their _cn
+!
+! Only the ends are wildcards; a path with a * in the middle is text.
+!
+! shop.moen.com's faucet quiz is the worked example. The page carries the
+! mount, <div id="zoovu-assistant">, and GTM-5M3PDQZ8 carries the Zoovu
+! launcher behind _eq on the path - so with the container replaced the mount
+! stays empty. Nothing in the chain is on any list; the launcher was simply
+! never injected. On every other page of the shop the line stands down and
+! says so: skipped=path want=/pages/faucet-finder-quiz
+! -----------------------------------------------------------------------------
+shop.moen.com##+js(gtm-tag, https://api-barracuda.zoovu.com/api/v1/launchers/mznpQl/moen-faucet-discovery, path=/pages/faucet-finder-quiz)
+
+! -----------------------------------------------------------------------------
 ! Some loaders cannot start from their own URL, and naming the script is then
 ! not enough on its own. LivePerson's web tag is the one this knows about
 ! (uAssets #33693): their tag.js opens with window.lpTag = window.lpTag || {}

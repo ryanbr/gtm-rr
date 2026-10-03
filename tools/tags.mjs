@@ -110,9 +110,13 @@ const triggersFrom = text => {
     const macros = splitArray(text, 'macros').map(raw => {
         const kind = /"function":"(__[a-z]+)"/.exec(raw);
         const name = /"vtp_name":"((?:[^"\\]|\\.)*)"/.exec(raw);
+        // __u is the url, and which part of it is in vtp_component. PATH is
+        // the one gtm-tag can be given, as path=.
+        const part = /"vtp_component":"([A-Z_]+)"/.exec(raw);
         return {
             kind: kind !== null ? kind[1] : '',
             name: name !== null ? unescape(name[1]) : '',
+            part: part !== null ? part[1] : '',
         };
     });
     const predicates = splitArray(text, 'predicates').map(raw => {
@@ -151,7 +155,11 @@ const triggersFrom = text => {
                 if ( p === undefined ) { continue; }
                 const m = macros[p.macro];
                 if ( m === undefined ) { continue; }
-                had.push({ ...p, variable: m.kind === '__v' ? m.name : '' });
+                had.push({
+                    ...p,
+                    variable: m.kind === '__v' ? m.name : '',
+                    path: m.kind === '__u' && m.part === 'PATH',
+                });
             }
             byTag.set(index, had);
         }
@@ -363,13 +371,25 @@ for ( const id of ids ) {
         // value: that is what gtm-tag can be given. A host or an event test
         // is for a person to read.
         const usable = new Set();
+        // A path test is the other kind a filter can be given, and the one
+        // containers hold a page-specific tag behind most often. Their four
+        // shapes map onto gtm-tag's one argument.
+        const paths = new Set();
         for ( const c of tag.conditions ) {
+            if ( c.path === true ) {
+                if ( c.fn === '_eq' ) { paths.add('path=' + c.value); }
+                else if ( c.fn === '_sw' ) { paths.add('path=' + c.value + '*'); }
+                else if ( c.fn === '_ew' ) { paths.add('path=*' + c.value); }
+                else if ( c.fn === '_cn' ) { paths.add('path=*' + c.value + '*'); }
+                continue;
+            }
             if ( c.variable === '' ) { continue; }
             if ( c.fn !== '_cn' && c.fn !== '_eq' ) { continue; }
             usable.add(c.variable + '=' + c.value);
         }
+        tag.path = paths.size === 1 ? [ ...paths ][0] : '';
         tag.when = usable.size === 1 ? [ ...usable ][0] : '';
-        tag.others = [ ...usable ];
+        tag.others = [ ...usable, ...paths ];
         rest.push(tag);
     }
     const trackers = byUrl.size - rest.length;
@@ -381,13 +401,14 @@ for ( const id of ids ) {
         continue;
     }
     console.log('  The rest, which is where page functionality would be:');
-    for ( const { url, callback, metadata, when, conditions } of rest ) {
+    for ( const { url, callback, metadata, when, path, conditions } of rest ) {
         console.log(`    ${url}` +
             `${metadata !== '' ? '   metadata=' + metadata : ''}`);
         console.log(`      <site>##+js(gtm-tag, ${url}` +
             `${callback !== '' || when !== '' ? ', ' + callback : ''}` +
-            `${when !== '' ? ', ' + when : ''})`);
-        if ( when === '' && conditions.length !== 0 ) {
+            `${when !== '' ? ', ' + when : ''}` +
+            `${path !== '' ? ', ' + path : ''})`);
+        if ( when === '' && path === '' && conditions.length !== 0 ) {
             const seenSaid = new Set();
             console.log('      no single data layer condition to give it -' +
                 ' what the container tests:');
