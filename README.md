@@ -42,7 +42,7 @@ is one setting on **one line**: the name, then every URL you want, separated
 by spaces.
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.0/dist/ga-optout.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.0/dist/gtm-tag.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.1/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.1/dist/ga-optout.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.1/dist/gtm-tag.js
 ```
 
 Those are the three resources: `googletagmanager_gtm.js`, `ga-optout.js` and
@@ -64,7 +64,7 @@ straight away: the parsed set is cached in a selfie, invalidated on
 reason to pin a tag.
 
 These are pinned to a release, so an install stays where it is until you move
-it. `main` in place of `v1.2.0` follows the branch instead, which is useful for
+it. `main` in place of `v1.2.1` follows the branch instead, which is useful for
 testing a fix and not for leaving in place.
 
 **Use the redirect and the scriptlet together.** `filters/gtm.txt` carries the
@@ -334,10 +334,20 @@ petzl.com##+js(gtm-tag, https://maps.googleapis.com/maps/api/js?v=3.31&key=<thei
 
 The second argument is a global the tag needs before it arrives: a loader asked
 for with `&callback=initGmaps` throws if it lands first. It is a *name*, and a
-page can give the same name twice - petzl's head defines an empty `initGmaps`
-so their other pages do not throw, and the real one comes from a script at the
-foot of the page - so the tag is held until the page has parsed, and what
-answers the callback is the real one.
+name can hold a placeholder: petzl's head defines
+`window.initGmaps = window.initGmaps || function() { };` so their other pages
+do not throw, and the real `initGmaps` is assigned inside
+`petzl.controllers.map`, their map controller, when the page constructs it. So
+the wait is for a function **with a body**, not merely for the name - a Maps
+loader answered by the empty one draws nothing and reports nothing. On that
+page the sign it worked is the browser asking for your location, which is the
+first thing the real one does.
+
+It waits up to ten seconds. If the name still holds nothing but a placeholder
+by then, the tag is loaded anyway (`waited-out=`): their own code guards on the
+global the loader creates - `onSearchDealer` opens with
+`if (!window.google) return;` - so a search the page makes later works even
+when the callback was spent.
 
 Note what this is: a url in a filter, pinned by hand. It can go stale when the
 site edits its container, and it loads a third-party script, so keep these in

@@ -88,9 +88,10 @@ describe('gtm-tag', ( ) => {
     it('will not take an empty placeholder for the real thing', async ( ) => {
         // petzl.com's dealer page, in order: an inline script in the head
         // defines initGmaps as an empty function so that their other pages do
-        // not throw, and DealerLocatorAdv.js - a plain script at the foot of
-        // the page - assigns the real one. A Maps loader let in between the
-        // two is answered by the empty one and no map is drawn.
+        // not throw, and the real one is assigned inside their map
+        // controller, petzl.controllers.map, when the page constructs it -
+        // after the document has parsed. A Maps loader answered by the empty
+        // one draws nothing, and says nothing either.
         const dom = page();
         const w = dom.window;
         const out = lines(w);
@@ -98,7 +99,10 @@ describe('gtm-tag', ( ) => {
         w.eval('window.initGmaps = window.initGmaps || function() { };');
         w.eval(asScriptlet(MAPS, 'initGmaps'));
         assert.deepEqual(injected(w), [],
-            'the name is there, but the page has not parsed');
+            'the name is there, but it holds the placeholder');
+        await settle(120);
+        assert.deepEqual(injected(w), [],
+            'still only the placeholder, parsed or not');
         w.eval('window.initGmaps = function(){ window.mapped = true; };');
         await settle(120);
         assert.deepEqual(injected(w), [ MAPS ]);
@@ -106,6 +110,58 @@ describe('gtm-tag', ( ) => {
             out.join(' | '));
         w.initGmaps();
         assert.equal(w.mapped, true, 'the one it waited for is the real one');
+    });
+
+    it('holds a real callback until the document has parsed', async ( ) => {
+        // Their own tags fire at the end of a page's life - the one this
+        // stands in for fires on a consent event, later still - and a page
+        // that has not finished parsing has not run the code the tag is for.
+        const dom = page();
+        const w = dom.window;
+        lines(w);
+        assert.equal(w.document.readyState, 'loading');
+        w.eval('window.initGmaps = function(){ window.mapped = true; };');
+        w.eval(asScriptlet(MAPS, 'initGmaps'));
+        assert.deepEqual(injected(w), [],
+            'a real callback, but the page is still parsing');
+        await settle(120);
+        assert.deepEqual(injected(w), [ MAPS ]);
+    });
+
+    it('takes the placeholder in the end rather than nothing', async ( ) => {
+        // A page that never replaces it still gets the loader, because its
+        // own code guards on the global the loader creates: petzl's
+        // onSearchDealer opens with if (!window.google) return;, so a search
+        // the page makes later works even though the callback was spent.
+        const dom = page();
+        const w = dom.window;
+        try {
+            const out = lines(w);
+            const real = w.setTimeout;
+            w.setTimeout = (fn, ms) => real.call(w, fn, ms === 50 ? 1 : ms);
+            w.eval('window.initGmaps = function() { };');
+            w.eval(asScriptlet(MAPS, 'initGmaps'));
+            await settle(500);
+            assert.deepEqual(injected(w), [ MAPS ]);
+            assert.ok(out.some(l => l.includes(' waited-out=initGmaps')),
+                out.join(' | '));
+        } finally {
+            w.close();
+        }
+    });
+
+    it('an arrow placeholder is a placeholder too', async ( ) => {
+        const dom = page();
+        const w = dom.window;
+        try {
+            lines(w);
+            w.eval('window.initGmaps = ( ) => {};');
+            w.eval(asScriptlet(MAPS, 'initGmaps'));
+            await settle(150);
+            assert.deepEqual(injected(w), [], 'empty body, whatever the form');
+        } finally {
+            w.close();
+        }
     });
 
     it('gives up rather than waiting for ever', async ( ) => {

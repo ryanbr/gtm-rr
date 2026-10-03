@@ -32,9 +32,9 @@
     A second argument names a global the tag needs before it runs. A Maps
     loader asked for with &callback=initGmaps will throw if it arrives before
     the page has defined initGmaps, so with that argument this waits for the
-    name to appear - and for the page to have parsed, because a page may put
-    an empty placeholder of that name in the head and the real one at the
-    foot - and injects then:
+    name to hold a function with a body - a page may define an empty
+    placeholder of that name early and the real one much later - and injects
+    then:
 
       example.com##+js(gtm-tag, https://maps.googleapis.com/maps/api/js?key=K&callback=initGmaps, initGmaps)
 
@@ -124,9 +124,30 @@ function consentRRGtmTag() {
     // A name to wait for: a loader asked for with a callback throws if it
     // arrives before the page has defined it. Their own tags run late in a
     // page's life, so waiting is what they would have done.
+    // An empty function is a placeholder, not the callback. petzl.com's
+    // dealer page defines
+    //   window.initGmaps = window.initGmaps || function() { };
+    // in the head so their other pages do not throw, and the real initGmaps
+    // is assigned inside petzl.controllers.map, their map controller, when
+    // the page constructs it. A loader answered by the placeholder draws
+    // nothing and reports nothing - the only sign is the absence of whatever
+    // the real one does, which on that page is the browser asking for the
+    // user's location.
+    const reEmptyBody = /\{\s*\}\s*$/;
+
+    const placeholder = fn => {
+        try {
+            return reEmptyBody.test(w.Function.prototype.toString.call(fn));
+        } catch(ex) {
+        }
+        return false;
+    };
+
     const ready = ( ) => {
         try {
-            return typeof w[needs] === 'function';
+            const fn = w[needs];
+            if ( typeof fn !== 'function' ) { return false; }
+            return placeholder(fn) === false;
         } catch(ex) {
         }
         return false;
@@ -140,6 +161,17 @@ function consentRRGtmTag() {
         if ( ready() === false ) {
             waited += EVERY;
             if ( waited >= UNTIL ) {
+                // Whatever is there after this long is what the page has. A
+                // placeholder is still worth loading for: their own code
+                // guards on the loader's global existing - petzl's
+                // onSearchDealer opens with if (!window.google) return; - so
+                // a search the page makes later works even when the callback
+                // was spent on an empty function.
+                if ( typeof w[needs] === 'function' ) {
+                    say('waited-out=' + needs + ' after=' + UNTIL + 'ms');
+                    inject();
+                    return;
+                }
                 say('gave-up=' + needs + ' after=' + UNTIL + 'ms');
                 return;
             }
@@ -157,13 +189,10 @@ function consentRRGtmTag() {
         else { look(); }
     };
 
-    // Not while the document is still being parsed, even if the name is
-    // already there. A page can define the name early as a placeholder and
-    // assign the real one late: petzl.com's dealer page sets
-    //   window.initGmaps = window.initGmaps || function() { };
-    // in the head, and the real initGmaps comes from a script at the foot of
-    // the page, so a tag let in between the two is answered by the empty one
-    // and draws nothing. Their own tags fire after the page is parsed anyway.
+    // Not while the document is still being parsed. Their own tags fire after
+    // that at the earliest - the one this stands in for fires on a consent
+    // event, later still - and a page that has not finished parsing has not
+    // run the code that sets up what the tag is for.
     try {
         if ( doc.readyState !== 'loading' ) { begin(); }
         else {

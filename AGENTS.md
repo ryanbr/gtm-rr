@@ -121,12 +121,21 @@ tag's url goes in the filter and only that one script loads.
 - Reading a container by hand: the tags are double-escaped, so `\x3d` in a
   `vtp_html` string is a `=` and a naive extract truncates the url at the
   first one. `tools/tags.mjs` un-escapes before it matches.
-- **A name the tag waits for can be a placeholder.** petzl.com's dealer page
-  defines `window.initGmaps = window.initGmaps || function() { };` in the head
-  so their other pages do not throw, and assigns the real one from a script at
-  the foot. `typeof w[needs] === 'function'` was true for the empty one, so the
-  tag is held until the document has parsed as well - which is also when their
-  own tags would have fired.
+- **A name the tag waits for can be a placeholder, and `typeof` cannot tell.**
+  petzl.com's dealer page defines
+  `window.initGmaps = window.initGmaps || function() { };` in the head so their
+  other pages do not throw, and the real one is assigned inside
+  `petzl.controllers.map` when the page constructs it. `typeof w[needs] ===
+  'function'` was true for the empty one from the moment the head ran, so Maps
+  loaded, called it, and drew nothing - with no error and no console line
+  anywhere. The gate now wants a function **with a body**, and holds until the
+  document has parsed as well. Field-found, not reviewed-found: the report was
+  that allowing the container made the browser ask for the user's location and
+  the map open, which is what the real callback does first.
+- Where a wait can time out, think about what to do with the time-out. Here the
+  tag loads anyway, because the page's own code guards on the loader's global
+  existing (`if (!window.google) return;`), so a later search still works. Not
+  injecting would have left nothing at all.
 - The once-marker is a name of its own (`consentRRGtmTagLoaded`), never the
   function's name: re-injected, the hoisted function declaration overwrites
   whatever was stored there and the guard is lost. That has been got wrong

@@ -570,6 +570,21 @@ export default [
         to: '        inject();',
     },
     {
+        label: 'tag: a placeholder counts as the real thing',
+        file: TAG,
+        from: '            return placeholder(fn) === false;',
+        to: '            return true;',
+    },
+    {
+        label: 'tag: a page that only ever has a placeholder gets nothing',
+        file: TAG,
+        from: "                if ( typeof w[needs] === 'function' ) {\n" +
+            "                    say('waited-out=' + needs + ' after=' + " +
+            "UNTIL + 'ms');\n                    inject();\n" +
+            "                    return;\n                }",
+        to: '',
+    },
+    {
         label: 'tag: injects while the page is still parsing',
         file: TAG,
         from: "        if ( doc.readyState !== 'loading' ) { begin(); }\n" +
