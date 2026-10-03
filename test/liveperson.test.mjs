@@ -236,6 +236,21 @@ describe('gtm-tag, a loader that cannot start from its own url', ( ) => {
         );
     });
 
+    it('records both their milestones even when load has gone', async ( ) => {
+        // This runs a task after the document parsed, and on a slow page that
+        // can be after load as well - a listener registered then never fires,
+        // and theirs, called from a container tag, always recorded both.
+        const w = page().window;
+        await settle(120);
+        assert.equal(w.document.readyState, 'complete', 'load has been and gone');
+        w.eval(asScriptlet(SRC));
+        await settle(120);
+        assert.ok(w.lpTag._timing.start > 0, 'start');
+        assert.ok(w.lpTag._timing.contReady > 0, 'contReady');
+        assert.ok(w.lpTag._timing.domReady > 0, 'domReady, with no load left');
+        assert.equal(w.lpTag.isDom, true);
+    });
+
     it('carries the arrays their taglets push into', async ( ) => {
         const w = page().window;
         w.eval(asScriptlet(SRC));

@@ -503,6 +503,14 @@ function consentRRGtmTag(a1 = '', a2 = '', a3 = '', a4 = '', a5 = '') {
         // the timing their taglets read, and the DOM_READY their framework
         // waits on. Dropping it would leave a page where the widget never
         // opens, since that trigger is queued for tag.js to drain.
+        // Both of their milestones, however late this runs. Theirs is called
+        // from a container tag and registers two listeners, so it always
+        // records contReady and domReady; this runs a task after the document
+        // parsed and can run after load as well, and a listener registered
+        // then never fires - leaving _timing.domReady unset on a page where
+        // theirs would have had it. Their framework reads that object, so the
+        // milestone is taken from readyState where the event is already gone
+        // rather than waited for.
         tag.init = function( ) {
             if ( this._timing.start !== undefined ) { return; }
             this._timing.start = (new Date()).getTime();
@@ -516,7 +524,11 @@ function consentRRGtmTag(a1 = '', a2 = '', a3 = '', a4 = '', a5 = '') {
                 } else {
                     self._domReady('contReady');
                 }
-                w.addEventListener('load', ready('domReady'), { once: true });
+                if ( doc.readyState === 'complete' ) {
+                    self._domReady('domReady');
+                } else {
+                    w.addEventListener('load', ready('domReady'), { once: true });
+                }
             } catch(ex) {
             }
         };

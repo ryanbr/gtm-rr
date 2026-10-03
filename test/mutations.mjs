@@ -1023,6 +1023,16 @@ export default [
         to: '            if ( false ) { return false; }',
     },
     {
+        label: 'lp: domReady waits for an event already gone',
+        file: TAG,
+        from: "                if ( doc.readyState === 'complete' ) {\n" +
+            "                    self._domReady('domReady');\n" +
+            '                } else {\n' +
+            "                    w.addEventListener('load', ready('domReady'), { once: true });\n" +
+            '                }',
+        to: "                w.addEventListener('load', ready('domReady'), { once: true });",
+    },
+    {
         label: 'lp: their timing and DOM_READY never start',
         file: TAG,
         from: '            tag.init();',

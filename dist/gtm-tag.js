@@ -310,7 +310,11 @@ function consentRRGtmTag(a1 = '', a2 = '', a3 = '', a4 = '', a5 = '') {
                 } else {
                     self._domReady('contReady');
                 }
-                w.addEventListener('load', ready('domReady'), { once: true });
+                if ( doc.readyState === 'complete' ) {
+                    self._domReady('domReady');
+                } else {
+                    w.addEventListener('load', ready('domReady'), { once: true });
+                }
             } catch(ex) {
             }
         };
