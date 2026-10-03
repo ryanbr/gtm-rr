@@ -557,6 +557,43 @@ export default [
         to: "    const bundle = bundled.join('');",
     },
     {
+        label: 'consent: a state something else set is overwritten',
+        file: GTM,
+        from: "                if ( typeof had === 'string' && had !== '' ) { return 'theirs'; }",
+        to: '',
+    },
+    {
+        label: 'consent: targeting is given away with the rest',
+        file: GTM,
+        from: "    const CONTENT_GROUPS = 'C0001,C0002,C0003';",
+        to: "    const CONTENT_GROUPS = 'C0001,C0002,C0003,C0004,C0005';",
+    },
+    {
+        label: 'consent: a filter cannot change what was given',
+        file: GTM,
+        from: "        if ( consentAsked !== '' ) { adjustConsent(); }",
+        to: '',
+    },
+    {
+        label: 'consent: given on a page this never stood in for',
+        file: GTM,
+        from: "        const consentState = report.installed === 'installed'\n" +
+            "            ? assumeConsent()\n            : 'left';",
+        to: "        const consentState = assumeConsent();",
+    },
+    {
+        label: 'consent: their own callback is never called',
+        file: GTM,
+        from: '                        w.OptanonWrapper();',
+        to: '',
+    },
+    {
+        label: 'consent: the event a page re-checks on is not fired',
+        file: GTM,
+        from: "                w.setTimeout(( ) => { fire('OneTrustGroupsUpdated'); }, 0);",
+        to: '',
+    },
+    {
         label: 'waits: told even once a live container has taken over',
         file: GTM,
         from: '        if ( live() ) { return; }\n        let told = 0;',

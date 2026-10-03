@@ -45,7 +45,7 @@ is one setting on **one line**: the name, then every URL you want, separated
 by spaces.
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.9.0/dist/gtm-rr-all.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.10.0/dist/gtm-rr-all.js
 ```
 
 **One URL carries all three.** A resources file holds as many resources as it
@@ -57,7 +57,7 @@ built from the same files and the tests check it holds them unchanged.
 To install only some of them, name those instead - still on the one line:
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.9.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.9.0/dist/gtm-tag.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.10.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.10.0/dist/gtm-tag.js
 ```
 
 **One URL per line does not work, and fails quietly.** uBO reads a hidden
@@ -76,7 +76,7 @@ straight away: the parsed set is cached in a selfie, invalidated on
 reason to pin a tag.
 
 These are pinned to a release, so an install stays where it is until you move
-it. `main` in place of `v1.9.0` follows the branch instead, which is useful for
+it. `main` in place of `v1.10.0` follows the branch instead, which is useful for
 testing a fix and not for leaving in place.
 
 **Use the redirect and the scriptlet together.** `filters/gtm.txt` carries the
@@ -441,6 +441,57 @@ tool reports those tags separately, with the elements they write into, because
 the first useful question is whether the page still has them - a container
 often keeps tags for markup the site has moved on from. Theirs target `.gtm-*`
 classes the page no longer carries.
+
+### A consent state the container took with it
+
+A container often loads the site's consent manager, and a page reads that
+manager's state to decide whether to show **its own** content.
+globalblue.com's refund-points map:
+
+```js
+checkOptanonActiveGroups() {
+    const i = window.OptanonActiveGroups ?? '';
+    return i.includes('C0001') && i.includes('C0002') && i.includes('C0003');
+}
+openOTYTNotification() { window.OneTrust?.ToggleInfoDisplay() }
+```
+
+Replace the loader and the manager goes with it, so that variable is never
+set, the map never renders, and the button that would reopen the banner
+optional-chains into nothing. Blocking `gtm.js` did that, which makes it this
+resource's to answer rather than someone else's.
+
+**What it answers with is a judgement, stated plainly.** Where this stood in
+for the container and nothing else has set a state, it publishes the
+categories a page needs to show its own content:
+
+```
+OptanonActiveGroups = OnetrustActiveGroups = 'C0001,C0002,C0003'
+```
+
+necessary, performance and functional - and **not** `C0004` or `C0005`,
+targeting and social, which is what an ad is gated on. It also puts up a
+minimal `OneTrust` whose UI methods are no-ops, so a reopen button does not
+sit dead, calls the page's own `OptanonWrapper()` if it defined one, and fires
+`OneTrustGroupsUpdated`, which is how a page re-checks - globalblue does
+`fromEvent(window, 'OneTrustGroupsUpdated')` and runs change detection off it.
+
+Nothing is transmitted. This is a variable a page reads; every request that
+follows is still your filter lists' business. A filter can change it:
+
+```
+example.com##+js(googletagmanager_gtm, consent=all)   targeting too
+example.com##+js(googletagmanager_gtm, consent=off)   none of it
+```
+
+`consent=off` is the right answer if you run [consent-rr][consent-rr], which
+does this properly for nineteen managers - a stored and transmitted refusal
+behind the page-side state, rather than the minimum that keeps a page
+working. The summary line says which happened: `consent=content`,
+`consent=theirs` where something else had already spoken, or `consent=left`
+where this never stood in for the container.
+
+[consent-rr]: https://github.com/ryanbr/consent-rr
 
 ### A wait with a name only the page knows
 

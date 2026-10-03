@@ -113,7 +113,7 @@ function consentRRGtm(a1 = '', a2 = '', a3 = '') {
         const at = arg.indexOf('=');
         const key = at > 0 ? arg.slice(0, at) : '';
         if ( key === 'template' || key === 'needs' || key === 'event' ||
-            key === 'from' )
+            key === 'from' || key === 'consent' )
         {
             given[key] = arg.slice(at + 1).trim();
             continue;
@@ -124,6 +124,7 @@ function consentRRGtm(a1 = '', a2 = '', a3 = '') {
     const needs = given.needs !== undefined ? given.needs : loose[1];
     const event = given.event !== undefined ? given.event : '';
     const from = given.from !== undefined ? given.from : loose[2];
+    const consentAsked = given.consent !== undefined ? given.consent : '';
     const VERSION = '@@VERSION@@';
 
     let gaCalls = null;
@@ -196,6 +197,9 @@ function consentRRGtm(a1 = '', a2 = '', a3 = '') {
                 }
             };
         }
+        const consentState = report.installed === 'installed'
+            ? assumeConsent()
+            : 'left';
         try {
             w.console.info(
                 '[gtm-rr] ' + NAME + ' ' + VERSION +
@@ -205,6 +209,7 @@ function consentRRGtm(a1 = '', a2 = '', a3 = '') {
                 ' push=' + report.hooked +
                 ' container=' + report.installed +
                 ' hide=' + report.hiding() +
+                ' consent=' + consentState +
                 ' debug=' + report.level
             );
         } catch(ex) {
@@ -403,6 +408,116 @@ function consentRRGtm(a1 = '', a2 = '', a3 = '') {
     // any the page adds and would run before them - and a template's script
     // is usually written against what the page sets up in those. Then once
     // more at load, for a template that was not there the first time.
+    // A consent manager the container used to load, and a page that reads
+    // its state to decide whether to show its own content. Replacing the
+    // loader takes the manager with it, so the state is never set and the
+    // page waits for an answer nobody will give:
+    //
+    //   globalblue.com/es/refund-points-map
+    //     checkOptanonActiveGroups() {
+    //         const i = window.OptanonActiveGroups ?? '';
+    //         return i.includes('C0001') && i.includes('C0002')
+    //             && i.includes('C0003') }
+    //     openOTYTNotification() { window.OneTrust?.ToggleInfoDisplay() }
+    //
+    // - so the map never renders and the button that would open the banner
+    // optional-chains into nothing. Blocking gtm.js did that, which makes it
+    // this resource's to answer.
+    //
+    // What it answers with is a judgement, stated plainly: the categories a
+    // page needs to show its own content - necessary, performance,
+    // functional - and NOT targeting or social, which is what an ad is gated
+    // on. consent=all asks for those too; consent=off asks for none of it,
+    // for a visitor running consent-rr, which does this properly for
+    // nineteen managers with a stored and transmitted refusal behind it.
+    //
+    // Nothing is transmitted from here. This is a variable a page reads, and
+    // every request that follows is still the filter lists' business.
+    const CONTENT_GROUPS = 'C0001,C0002,C0003';
+    const ALL_GROUPS = 'C0001,C0002,C0003,C0004,C0005';
+    const GROUP_NAMES = [ 'OptanonActiveGroups', 'OnetrustActiveGroups' ];
+
+    // Answers what it did, for the one line this resource prints: a second
+    // line on every page is noise, and the summary is where its state goes.
+    // What this put up, so a filter's own call can change it afterwards:
+    // uBO appends that call after this file has run, so the only way an
+    // argument can have a say is by adjusting what is already there.
+    const GAVE = 'consentRRGtmGave';
+
+    // Only this file's own call reaches here, and that one never carries a
+    // filter's arguments - so off and all are not this function's business;
+    // adjustConsent() applies those to what this put up.
+    const assumeConsent = ( ) => {
+        // Their state, whoever set it. One name holding a value means a
+        // consent manager has spoken, and none of this is ours to touch.
+        for ( const name of GROUP_NAMES ) {
+            try {
+                const had = w[name];
+                if ( typeof had === 'string' && had !== '' ) { return 'theirs'; }
+            } catch(ex) {
+            }
+        }
+        const set = [];
+        for ( const name of GROUP_NAMES ) {
+            try {
+                w[name] = CONTENT_GROUPS;
+                set.push(name);
+            } catch(ex) {
+            }
+        }
+        try {
+            if ( w.OneTrust === undefined ) {
+                const noop = ( ) => undefined;
+                w.OneTrust = {
+                    // Their UI, which is not here: a page's reopen button
+                    // calls this and must not throw or sit dead.
+                    ToggleInfoDisplay: noop,
+                    Close: noop,
+                    changeLanguage: noop,
+                    AllowAll: noop,
+                    RejectAll: noop,
+                    IsAlertBoxClosed: ( ) => true,
+                    consentRRGtm: VERSION,
+                };
+                set.push('OneTrust');
+            }
+        } catch(ex) {
+        }
+        if ( set.length === 0 ) { return 'theirs'; }
+        try {
+            w[GAVE] = { groups: set, level: 'content' };
+        } catch(ex) {
+        }
+        // Their own callback, which a page defines and their loader calls
+        // once it has a state. Same contract as eventCallback.
+        try {
+            if ( typeof w.OptanonWrapper === 'function' ) {
+                w.setTimeout(( ) => {
+                    try {
+                        w.OptanonWrapper();
+                    } catch(ex) {
+                    }
+                }, 0);
+            }
+        } catch(ex) {
+        }
+        // And their event, which a page uses to re-check: globalblue does
+        // fromEvent(window, 'OneTrustGroupsUpdated') and runs change
+        // detection off it.
+        const tellGroups = ( ) => {
+            try {
+                w.setTimeout(( ) => { fire('OneTrustGroupsUpdated'); }, 0);
+            } catch(ex) {
+            }
+        };
+        try {
+            if ( doc.readyState === 'complete' ) { tellGroups(); }
+            else { w.addEventListener('load', tellGroups, { once: true }); }
+        } catch(ex) {
+        }
+        return 'content';
+    };
+
     // Quick while it is still a race, slower afterwards, the way gtm-tag
     // waits: a library a template's script is written against can arrive
     // late, and a template itself can be added to the page later.
@@ -682,7 +797,50 @@ function consentRRGtm(a1 = '', a2 = '', a3 = '') {
         }
     };
 
+    // What a filter asked for, applied to what this file's own call already
+    // put up a moment ago. Removing it where the answer is off, raising it
+    // where the answer is all.
+    const adjustConsent = ( ) => {
+        let gave = null;
+        try {
+            gave = w[GAVE];
+        } catch(ex) {
+        }
+        if ( gave === null || gave === undefined ) { return; }
+        if ( consentAsked === 'off' ) {
+            for ( const name of gave.groups || [] ) {
+                try {
+                    delete w[name];
+                } catch(ex) {
+                }
+            }
+            try {
+                if ( w.OneTrust && w.OneTrust.consentRRGtm === VERSION ) {
+                    delete w.OneTrust;
+                }
+                delete w[GAVE];
+            } catch(ex) {
+            }
+            say('consent=off');
+            return;
+        }
+        if ( consentAsked === 'all' && gave.level !== 'all' ) {
+            for ( const name of gave.groups || [] ) {
+                try {
+                    w[name] = ALL_GROUPS;
+                } catch(ex) {
+                }
+            }
+            try {
+                gave.level = 'all';
+            } catch(ex) {
+            }
+            say('consent=all');
+        }
+    };
+
     if ( from !== 'self' ) {
+        if ( consentAsked !== '' ) { adjustConsent(); }
         if ( selector !== '' ) { templates(); }
         if ( event !== '' ) { telling(); }
         return;

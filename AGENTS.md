@@ -228,6 +228,35 @@ takes arguments now, which means two rules:
 Both are mutation-tested. The second one fails 54 tests when it is wrong,
 which is the right shape for a contract everything else rests on.
 
+## The consent state, and why it is here at all
+
+A container loads the site's consent manager; replacing the loader takes the
+manager with it; and a page that reads the manager's state to show its own
+content then shows nothing. globalblue.com's map wants `OptanonActiveGroups`
+to hold C0001, C0002 and C0003. That breakage is this resource's doing, so
+the argument that it belongs to consent-rr does not survive contact with a
+visitor who installed only this one.
+
+What it publishes is a judgement: necessary, performance, functional - never
+targeting or social, which is what an ad is gated on. `consent=all` asks for
+those too, `consent=off` asks for none, and off is the right answer for
+anyone running consent-rr, which puts a stored and transmitted refusal behind
+the page-side state instead of the minimum.
+
+Three things made it work on a real page, and each has a mutation: the
+variable itself, the page's own `OptanonWrapper()` callback, and
+`OneTrustGroupsUpdated` - the event their app re-checks on. Two more that the
+mutations found rather than review: a state anything else has set is left
+alone (one name holding a value is a manager having spoken), and nothing is
+published where this did not install, which only a `container=kept` page can
+show - a page with no loader proves nothing, because nothing runs there.
+
+**A filter's argument reaches this resource after its own call has run.** uBO
+appends the per-filter call, so `consent=off` cannot prevent the state, only
+remove what was put up a moment earlier. That is why there is an adjust step
+rather than a decision point, and why the off and all branches inside the
+assume step were dead code the harness caught.
+
 ## A page's wait, when the name is the page's own
 
 Three of these are GTM's and this resource answers them all: `eventCallback`,

@@ -328,22 +328,25 @@ describe('gtm-tag', ( ) => {
     it('leaves a write by anything else alone', async ( ) => {
         const dom = page();
         const w = dom.window;
-        lines(w);
+        const out = lines(w);
+        // Stood in BEFORE the resource, so the shim wraps this rather than
+        // the other way round. Replacing document.write afterwards would
+        // bypass the shim entirely and the assertion would pass for nothing
+        // - which is how this test first passed while the check it is for
+        // was removable.
+        w.eval('window.realWrites = 0;' +
+            'document.write = function(){ window.realWrites += 1; };');
         w.eval(asScriptlet(MAPS));
         const script = theScript(w);
-        // currentScript is not ours: the page itself is writing, and that is
+        // currentScript is somebody else's: the page is writing, and that is
         // the real document.write's business.
-        w.eval('window.realWrites = 0;');
-        const real = w.document.write;
-        assert.equal(typeof real, 'function');
-        w.eval('document.write = function(){ window.realWrites += 1; };');
-        // Our shim is already in place over the real one; the page replacing
-        // it afterwards is its own affair - so check the pass-through path
-        // instead, with currentScript pointing elsewhere.
         running(w, w.document.createElement('script'));
         w.eval('document.write("<b>not ours</b>");');
-        assert.equal(w.realWrites, 1);
+        assert.equal(w.realWrites, 1, 'passed through');
         finished(w, script);
+        await settle(20);
+        assert.equal(out.filter(l => l.includes(' wrote=')).length, 0,
+            out.join(' | '));
     });
 
     it('gives document.write back when the script is done', async ( ) => {

@@ -1278,7 +1278,7 @@ describe('googletagmanager_gtm', ( ) => {
             '[gtm-rr] googletagmanager_gtm ' + versions.gtm +
             ' loader=/gtm.js id=' + ID +
             ' layer=dataLayer push=hooked container=installed hide=absent' +
-            ' debug=verbose'
+            ' consent=content debug=verbose'
         );
     });
 });
