@@ -380,6 +380,55 @@ Nothing here is vendor-specific: `attr:` takes any name. The arguments can
 also be named in any order - `url=`, `needs=`, `when=` - since position is a
 poor way to ask for the fourth thing.
 
+**And some loaders cannot start from their own url at all.** uAssets #33693:
+medibank.com.au's "Message us" button is gone. It is a LivePerson engagement -
+an `LPMcontainer` holding their own `message-us-button.svg` - and the only
+copy of the snippet that starts it is a Custom HTML tag in `GTM-TS6X5PB`.
+Where that snippet used to sit inline the page now has a bare
+`<!--Live person and standard tag -->`, and not one of their twenty clientlibs
+mentions `lpTag`, so there is nothing left in the page to wait for either.
+
+Naming the script is not enough. Their `tag.js` opens with
+
+```js
+window.lpTag = window.lpTag || {}
+```
+
+which reads as self-starting and is not: it takes the account as
+`site = a.site || b.site` off objects the snippet was expected to have built,
+and the first thing it does with them is `b.defer(...)`. Appended on its own it
+throws `TypeError: b.defer is not a function` with `lpTag.site` null. What is
+missing is not a url, it is the object - an account id, three queueing
+functions, a loader for their taglets, and seven arrays those push into.
+
+So `gtm-tag` builds it, off the url the filter already gives it:
+
+```
+www.medibank.com.au##+js(gtm-tag, https://lptag.liveperson.net/tag/tag.js?site=3178090)
+www.medibankoshc.com.au##+js(gtm-tag, https://lptag.liveperson.net/tag/tag.js?site=3178090)
+```
+
+The account comes out of that url's own `site=`, so there is no extra argument
+and the line is an ordinary `gtm-tag` line. Measured in Chrome against the live
+page with `gtm.js` still replaced: the button is back, `lpTag.site` is 3178090,
+their tag 4.1.18 runs, and the request set is the same one allowing the
+container produces. The exceptions this replaces,
+`@@||googletagmanager.com/gtm.js$domain=medibank.com.au` and
+`medibankoshc.com.au`, let that whole container back in - a Facebook pixel
+among the rest.
+
+It unblocks nothing: the host is one no default list blocks, and the rule that
+would is in Fanboy's Social/Chat addon, where a reader has asked for chat
+widgets to be gone and the append simply does not load. It also leaves
+LivePerson's own `window._lptStop` opt-out alone, and stands aside with
+`kept=theirs` on a page where the real snippet ran - which is what their own
+snippet does on a second copy.
+
+That object is published boilerplate, the same on every LivePerson site but for
+the id, and it is rebuilt rather than copied, so what ships is this repo's own
+expression of it. It is also the one piece of vendor knowledge in here, keyed
+to that host and path: every other url is appended exactly as before.
+
 The second argument is a global the tag needs before it arrives: a loader asked
 for with `&callback=initGmaps` throws if it lands first. It is a *name*, and a
 name can hold a placeholder: petzl's head defines

@@ -268,6 +268,42 @@ of someone's A/B test for a visitor - so the orchestrator row is narrower
 rather than gone. What a resource can do is answer the contract: a global's
 shape, not a vendor's data.
 
+## A writer whose code the page did not keep
+
+The writer row said "where the page kept the code", and medibank.com.au is the
+case where it kept none of it (uAssets #33693). The "Message us" button is a
+LivePerson engagement, the only copy of LivePerson's bootstrap is a Custom
+HTML tag in their container, and where it used to sit inline the page has a
+bare `<!--Live person and standard tag -->`. Twenty clientlibs, no `lpTag`.
+
+A `gtm-tag` line could not fix it either, and the reason is worth keeping
+because it looks like it should: `tag.js` opens with
+`window.lpTag = window.lpTag || {}`. That reads as self-starting. It is not -
+the account comes from `site = a.site || b.site` off objects the snippet built,
+and `b.defer(...)` is the next thing it touches. **Read a vendor's loader far
+enough to see what it reads, not just far enough to see it guard.** The
+measurement that settled it was one line in the console:
+`TypeError: b.defer is not a function`, with `lpTag.site` null.
+
+So gtm-tag builds the object, keyed on that host and path, with the account
+read out of the url's own `site=`. Which is the shape to copy if another vendor
+turns up: the filter stays a url, the resource gains a small builder behind a
+host test, and nothing new has to be installed. The first draft of this was a
+fifth resource, `gtm-liveperson.js`, and folding it into gtm-tag cost nothing
+and removed a name from the install.
+
+Two of the bugs in that first draft came out of its own tests rather than
+review, and both are the same mistake:
+
+- it waited for `DOMContentLoaded` where what it needed was a **head**. That
+  event can arrive with none in the document, and it then appended to nothing,
+  once, and printed its success line anyway. Folding it into gtm-tag retired
+  the question - gtm-tag already appends a task after the document parsed.
+- it dropped `lpTag.sdes` and `lpTag.vars` where a page had seeded them, which
+  is the documented way to hand LivePerson a visitor's details. Their snippet
+  reads every field back out of whatever is there (`section: lpTag.section ||
+  ""`). **A stand-in for a snippet has to keep what the snippet kept.**
+
 ## The consent state, and why it is here at all
 
 A container loads the site's consent manager; replacing the loader takes the

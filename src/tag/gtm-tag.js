@@ -311,12 +311,249 @@ function consentRRGtmTag(a1 = '', a2 = '', a3 = '', a4 = '', a5 = '') {
         return count;
     };
 
+    // Some loaders cannot start from their own URL, and naming the script is
+    // then not enough. LivePerson's is the one this has met - uAssets #33693,
+    // medibank.com.au's "Message us" button, which is an LPMcontainer their
+    // engagement draws and GTM-TS6X5PB holds the only copy of the snippet
+    // that starts it. Where that snippet used to sit inline the page has a
+    // bare "<!--Live person and standard tag -->", and none of their twenty
+    // clientlibs mentions lpTag, so there is nothing left in the page to
+    // wait for.
+    //
+    // Their tag.js opens with
+    //
+    //   window.lpTag = window.lpTag || {}
+    //
+    // which reads as self-starting and is not: it takes the account as
+    // "site = a.site || b.site" off objects the snippet was expected to have
+    // built, and the first thing it does with them is b.defer(...). Appended
+    // on its own it throws "TypeError: b.defer is not a function" with
+    // lpTag.site null - measured on their page. What is missing is not a URL,
+    // it is the object: an account id, three queueing functions, a loader for
+    // their taglets, and seven arrays those push into.
+    //
+    // That object is published boilerplate, the same on every LivePerson site
+    // but for the id, and it is rebuilt below rather than copied, so what
+    // ships is this file's own expression of it. The id is read off the url
+    // the filter already gives, so this needs no argument of its own and the
+    // filter stays an ordinary line:
+    //
+    //   www.medibank.com.au##+js(gtm-tag, https://lptag.liveperson.net/tag/tag.js?site=3178090)
+    //
+    // Nothing is unblocked by it. The host is one no default list blocks - the
+    // rule that would is in Fanboy's Social/Chat addon list, and a reader
+    // running that is asking for chat widgets to be gone, so there the append
+    // does not load and nothing comes back. Blocking stays the lists' call.
+    const LP_PATH = '/tag/tag.js';
+    const LP_HOST = 'liveperson.net';
+    const reACCOUNT = /^[0-9]{3,12}$/;
+
+    const lpAccount = ( ) => {
+        try {
+            const host = String(wanted.hostname);
+            if ( host !== LP_HOST && host.endsWith('.' + LP_HOST) === false ) {
+                return '';
+            }
+            if ( wanted.pathname !== LP_PATH ) { return ''; }
+            const site = wanted.searchParams.get('site') || '';
+            return reACCOUNT.test(site) ? site : '';
+        } catch(ex) {
+        }
+        return '';
+    };
+
+    const lpTagFor = site => {
+        // A page may seed the object before the tag runs: sdes and vars are
+        // the documented way to hand LivePerson a visitor's details, and a
+        // site that does it writes them first. Their snippet reads every
+        // field back out of whatever is there (section: lpTag.section || ""),
+        // so dropping them would lose what the page meant to pass. Theirs is
+        // also where autoStart's shape comes from: false only when the page
+        // said false.
+        let seeded = null;
+        try {
+            if ( w.lpTag && typeof w.lpTag === 'object' ) { seeded = w.lpTag; }
+        } catch(ex) {
+        }
+        const was = (field, fallback) => {
+            if ( seeded === null ) { return fallback; }
+            try {
+                const had = seeded[field];
+                return had !== undefined && had !== null ? had : fallback;
+            } catch(ex) {
+            }
+            return fallback;
+        };
+        const wasList = field => {
+            const had = was(field, null);
+            return Array.isArray(had) ? had : [];
+        };
+
+        // The buckets their taglets defer into: before the tag (0), on
+        // trigger (1), and last for anything else. tag.js drains them by
+        // these names.
+        const BEFORE = '_defB';
+        const TRIGGER = '_defT';
+        const LAST = '_defL';
+
+        const tag = {
+            wl: was('wl', null),
+            scp: was('scp', null),
+            site: site,
+            section: String(was('section', '')),
+            tagletSection: was('tagletSection', null),
+            autoStart: was('autoStart', true) !== false,
+            ovr: was('ovr', {}),
+            protocol: 'https:',
+            // Their snippet's own version of itself, which taglets read to
+            // decide what the host page supports. 1.10.0 is the one every
+            // container carrying this tag ships.
+            _v: '1.10.0',
+            _tagCount: 1,
+            isDom: false,
+            _timing: {},
+            vars: wasList('vars'),
+            dbs: wasList('dbs'),
+            ctn: wasList('ctn'),
+            sdes: wasList('sdes'),
+            hooks: wasList('hooks'),
+            identities: wasList('identities'),
+            ev: wasList('ev'),
+        };
+
+        tag.defer = function(fn, bucket) {
+            const into = bucket === 0 ? BEFORE : bucket === 1 ? TRIGGER : LAST;
+            if ( Array.isArray(this[into]) === false ) { this[into] = []; }
+            this[into].push(fn);
+        };
+
+        // Until tag.js replaces these, a bind or a trigger is a call to make
+        // later: it goes into the queue as a call on whatever events object
+        // is there by then, which is theirs.
+        tag.events = {
+            bind: function(a, b, c) {
+                tag.defer(( ) => { tag.events.bind(a, b, c); }, 0);
+            },
+            trigger: function(a, b, c) {
+                tag.defer(( ) => { tag.events.trigger(a, b, c); }, 1);
+            },
+        };
+
+        // Their framework loads its own taglets through this, so it stays
+        // whatever else happens - the tag.js append itself is done below, by
+        // the same path every other tag here takes.
+        tag._load = function(url, charset, id) {
+            const where = doc.head || doc.documentElement;
+            if ( !where ) { return false; }
+            const script = doc.createElement('script');
+            script.setAttribute('charset', charset ? charset : 'UTF-8');
+            if ( id ) { script.setAttribute('id', id); }
+            script.setAttribute('src', url ||
+                this.protocol + '//' +
+                (this.ovr && this.ovr.domain ? this.ovr.domain : wanted.hostname) +
+                LP_PATH + '?site=' + this.site);
+            where.appendChild(script);
+            return true;
+        };
+
+        tag.load = function(url, charset, id) {
+            const self = this;
+            try {
+                w.setTimeout(( ) => { self._load(url, charset, id); }, 0);
+            } catch(ex) {
+                self._load(url, charset, id);
+            }
+        };
+
+        tag.start = function( ) {
+            this.autoStart = true;
+        };
+
+        tag._domReady = function(which) {
+            if ( this.isDom !== true ) {
+                this.isDom = true;
+                try {
+                    this.events.trigger('LPT', 'DOM_READY', { t: which });
+                } catch(ex) {
+                }
+            }
+            this._timing[which] = (new Date()).getTime();
+        };
+
+        // What theirs does in init() bar the load, which is this file's job:
+        // the timing their taglets read, and the DOM_READY their framework
+        // waits on. Dropping it would leave a page where the widget never
+        // opens, since that trigger is queued for tag.js to drain.
+        tag.init = function( ) {
+            if ( this._timing.start !== undefined ) { return; }
+            this._timing.start = (new Date()).getTime();
+            const self = this;
+            const ready = which => ( ) => { self._domReady(which); };
+            try {
+                if ( doc.readyState === 'loading' ) {
+                    doc.addEventListener(
+                        'DOMContentLoaded', ready('contReady'), { once: true }
+                    );
+                } else {
+                    self._domReady('contReady');
+                }
+                w.addEventListener('load', ready('domReady'), { once: true });
+            } catch(ex) {
+            }
+        };
+
+        return tag;
+    };
+
+    // Run before the append, and the answer is whether to go on with it.
+    const prepare = ( ) => {
+        const site = lpAccount();
+        if ( site === '' ) { return true; }
+        // LivePerson's documented way to switch itself off, which a page or a
+        // reader can set. Theirs checks it before loading and so does this: a
+        // resource that puts back a widget somebody turned off is restoring
+        // nothing.
+        try {
+            if ( typeof w._lptStop !== 'undefined' ) {
+                say('refused=_lptStop site=' + site);
+                return false;
+            }
+        } catch(ex) {
+        }
+        // Their snippet is written to run twice safely - a second copy only
+        // raises _tagCount - and the same has to be true here, because a page
+        // where the container was allowed through has the real one. _tagCount
+        // is what theirs tests, so it is what this tests.
+        try {
+            const already = w.lpTag;
+            if ( already && typeof already._tagCount !== 'undefined' ) {
+                already._tagCount += 1;
+                say('kept=theirs site=' + site);
+                return false;
+            }
+        } catch(ex) {
+        }
+        const tag = lpTagFor(site);
+        try {
+            w.lpTag = tag;
+            tag.init();
+        } catch(ex) {
+            say('failed=lpTag site=' + site);
+            return false;
+        }
+        say('built=lpTag site=' + site);
+        return true;
+    };
+
     const inject = ( ) => {
         try {
             // Once per url, however many times this runs.
             if ( w[MARKER] === undefined ) { w[MARKER] = {}; }
             if ( w[MARKER][id] === true ) { return true; }
             w[MARKER][id] = true;
+            // The object some loaders read their account off, where this is
+            // one of those urls. It also answers whether to append at all.
+            if ( prepare() === false ) { return true; }
             const script = doc.createElement('script');
             script.async = true;
             script.src = wanted.href;

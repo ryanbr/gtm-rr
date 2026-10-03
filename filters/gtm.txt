@@ -121,6 +121,30 @@ example.com##+js(gtm-tag, https://host.example/thing.js)
 www.hokkaido-np.co.jp##+js(gtm-tag, https://cdn.activity.smart-bdash.com/tag-manager/bd-7verxz/btm.js)
 
 ! -----------------------------------------------------------------------------
+! Some loaders cannot start from their own URL, and naming the script is then
+! not enough on its own. LivePerson's web tag is the one this knows about
+! (uAssets #33693): their tag.js opens with window.lpTag = window.lpTag || {}
+! so it reads as self-starting, and is not - it takes the account as
+! site = a.site || b.site off objects the container's snippet was expected to
+! have built, and calls b.defer() straight away. Appended alone it throws
+! "TypeError: b.defer is not a function".
+!
+! So gtm-tag builds that object first, with the account read out of the URL's
+! own site= parameter. No extra argument, and an ordinary gtm-tag line.
+!
+! medibank.com.au's "Message us" button is a LivePerson engagement and
+! GTM-TS6X5PB holds the only copy of the snippet behind it: where it used to
+! sit inline the page has a bare "<!--Live person and standard tag -->".
+!
+! This unblocks nothing. lptag.liveperson.net is on no default list - the rule
+! that would is in Fanboy's Social/Chat addon, and where that is on the append
+! does not load. window._lptStop, LivePerson's own opt-out, is honoured, and a
+! page where the real snippet already ran is left alone.
+! -----------------------------------------------------------------------------
+www.medibank.com.au##+js(gtm-tag, https://lptag.liveperson.net/tag/tag.js?site=3178090)
+www.medibankoshc.com.au##+js(gtm-tag, https://lptag.liveperson.net/tag/tag.js?site=3178090)
+
+! -----------------------------------------------------------------------------
 ! Where a container's job was to write into the page rather than to load
 ! anything, and the site has since moved that work browser-side and left the
 ! same code in the page inside an inert <template>.
