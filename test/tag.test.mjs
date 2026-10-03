@@ -189,7 +189,8 @@ describe('gtm-tag', ( ) => {
         try {
             const out = lines(w);
             const real = w.setTimeout;
-            w.setTimeout = (fn, ms) => real.call(w, fn, ms === 50 ? 1 : ms);
+            w.setTimeout = (fn, ms) =>
+                real.call(w, fn, ms >= 50 && ms <= 500 ? 1 : ms);
             w.eval('window.initGmaps = function() { };');
             w.eval(asScriptlet(MAPS, 'initGmaps'));
             await settle(500);
@@ -221,8 +222,10 @@ describe('gtm-tag', ( ) => {
         try {
             const out = lines(w);
             const real = w.setTimeout;
-            // Run its clock fast: the wait is 50ms steps up to ten seconds.
-            w.setTimeout = (fn, ms) => real.call(w, fn, ms === 50 ? 1 : ms);
+            // Run its clock fast: 50ms steps for the first second, 500ms
+            // after that, up to ten seconds.
+            w.setTimeout = (fn, ms) =>
+                real.call(w, fn, ms >= 50 && ms <= 500 ? 1 : ms);
             w.eval(asScriptlet(MAPS, 'neverDefined'));
             await settle(500);
             assert.deepEqual(injected(w), []);
@@ -231,6 +234,32 @@ describe('gtm-tag', ( ) => {
         } finally {
             // Whatever happened: a build that never gives up leaves this
             // window polling, and node --test would not exit.
+            w.close();
+        }
+    });
+
+    it('backs off instead of waking 200 times', async ( ) => {
+        const dom = page();
+        const w = dom.window;
+        try {
+            const out = lines(w);
+            const real = w.setTimeout;
+            const steps = [];
+            w.setTimeout = (fn, ms) => {
+                if ( ms >= 50 ) { steps.push(ms); ms = 1; }
+                return real.call(w, fn, ms);
+            };
+            w.eval(asScriptlet(MAPS, 'neverDefined'));
+            await settle(600);
+            assert.ok(out.some(l => l.includes(' gave-up=neverDefined')),
+                out.join(' | '));
+            // 50ms for the first second, where a callback assigned from a
+            // ready handler turns up, then 500ms: 20 + 17 wakeups to reach
+            // ten seconds, against 200 at a flat 50ms.
+            assert.deepEqual(steps.slice(0, 20), new Array(20).fill(50));
+            assert.deepEqual(steps.slice(20), new Array(17).fill(500));
+            assert.equal(steps.length, 37);
+        } finally {
             w.close();
         }
     });
@@ -275,7 +304,8 @@ describe('gtm-tag', ( ) => {
         try {
             const out = lines(w);
             const real = w.setTimeout;
-            w.setTimeout = (fn, ms) => real.call(w, fn, ms === 50 ? 1 : ms);
+            w.setTimeout = (fn, ms) =>
+                real.call(w, fn, ms >= 50 && ms <= 500 ? 1 : ms);
             w.eval("window.dataLayer = [{'PageType':'Home'}];");
             w.eval(asScriptlet(MAPS, '', 'PageType=DealerLocator'));
             await settle(500);

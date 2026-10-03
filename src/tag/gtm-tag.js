@@ -231,13 +231,21 @@ function consentRRGtmTag(url = '', needs = '', when = '') {
         return false;
     };
 
+    // Quick while this is a race - the callback a page assigns from a ready
+    // handler lands within a tick or two of the look starting - and slower
+    // after that, when it is only a page that may do something later. Ten
+    // seconds at 50ms is 200 wakeups for a page the trigger excludes, which
+    // is rude on a phone for no gain; this is 37.
     const EVERY = 50;
+    const SLOWER = 500;
+    const RACE = 1000;
     const UNTIL = 10000;
     let waited = 0;
 
     const look = ( ) => {
         if ( ready() === false ) {
-            waited += EVERY;
+            const step = waited < RACE ? EVERY : SLOWER;
+            waited += step;
             if ( waited >= UNTIL ) {
                 // Whatever is there after this long is what the page has. A
                 // placeholder is still worth loading for: their own code
@@ -261,7 +269,7 @@ function consentRRGtmTag(url = '', needs = '', when = '') {
                 return;
             }
             try {
-                w.setTimeout(look, EVERY);
+                w.setTimeout(look, step);
             } catch(ex) {
             }
             return;

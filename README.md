@@ -42,7 +42,7 @@ is one setting on **one line**: the name, then every URL you want, separated
 by spaces.
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.4.0/dist/gtm-rr-all.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.4.1/dist/gtm-rr-all.js
 ```
 
 **One URL carries all three.** A resources file holds as many resources as it
@@ -54,7 +54,7 @@ built from the same files and the tests check it holds them unchanged.
 To install only some of them, name those instead - still on the one line:
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.4.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.4.0/dist/gtm-tag.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.4.1/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.4.1/dist/gtm-tag.js
 ```
 
 **One URL per line does not work, and fails quietly.** uBO reads a hidden
@@ -73,7 +73,7 @@ straight away: the parsed set is cached in a selfie, invalidated on
 reason to pin a tag.
 
 These are pinned to a release, so an install stays where it is until you move
-it. `main` in place of `v1.4.0` follows the branch instead, which is useful for
+it. `main` in place of `v1.4.1` follows the branch instead, which is useful for
 testing a fix and not for leaving in place.
 
 **Use the redirect and the scriptlet together.** `filters/gtm.txt` carries the
@@ -371,8 +371,10 @@ real one from `$(document).ready(function(){ new petzl.controllers.DealerLocator
 which is one of those. Every listener for that event runs in the one task, so
 a timeout scheduled from ours runs after all of them.
 
-It waits up to ten seconds. If the name still holds nothing but a placeholder
-by then, the tag is loaded anyway (`waited-out=`): their own code guards on the
+It waits up to ten seconds, looking every 50ms for the first second - where a
+callback assigned from a ready handler turns up - and every 500ms after that,
+which is 37 timer wakeups rather than 200 on a page the trigger excludes. If
+the name still holds nothing but a placeholder by then, the tag is loaded anyway (`waited-out=`): their own code guards on the
 global the loader creates - `onSearchDealer` opens with
 `if (!window.google) return;` - so a search the page makes later works even
 when the callback was spent.

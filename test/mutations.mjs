@@ -647,6 +647,18 @@ export default [
         to: '        begin();',
     },
     {
+        label: 'tag: the wait never backs off',
+        file: TAG,
+        from: '            const step = waited < RACE ? EVERY : SLOWER;',
+        to: '            const step = EVERY;',
+    },
+    {
+        label: 'tag: the wait is slow from the start',
+        file: TAG,
+        from: '            const step = waited < RACE ? EVERY : SLOWER;',
+        to: '            const step = SLOWER;',
+    },
+    {
         label: 'tag: waits for ever',
         file: TAG,
         from: '            if ( waited >= UNTIL ) {',
