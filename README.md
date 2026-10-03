@@ -539,6 +539,36 @@ recommendations themselves come from the vendor chain. If you would rather not
 see the empty area, hide it: `hokkaido-np.co.jp##.ai-recommend-spinner-overlay`
 and the section around it.
 
+**And sometimes the container is not loading a tag at all - it is running the
+site's logic.** b2c.voegol.com.br's login page, where the redirect to their
+SSO never happens with the container replaced:
+
+```js
+idDevice = amplitudeGTM.getDeviceId()            // from a GTM-injected wrapper
+initializeExperiment(idDevice)                   // container code, whose key is
+                                                 //   a container VARIABLE
+mapStorageExpFull = { storage: featureExperiment.all(), deviceId: idDevice }
+localStorage.setItem('mapStorageExp', JSON.stringify(mapStorageExpFull))
+dataLayer.push({ event: 'experiment_ready_v2' })
+```
+
+Device id from one injected script, feature flags from another, the
+orchestration and the vendor's deployment key in container tags, and the app
+waiting on that cache before it will navigate. `gtm-tag` can fetch the two
+scripts; it cannot be their tag manager. Satisfying the wait is not enough
+either - tested - because something downstream reads actual flag values to
+choose a branch, and inventing those is guessing which side of someone's A/B
+test a visitor belongs on.
+
+That is the shape where an exception is the honest answer, and worth
+recognising early:
+
+| the container is a… | example | can a resource stand in? |
+|---|---|---|
+| loader | petzl.com: Maps, OneTrust | yes - `gtm-tag` with the url |
+| writer | shonenjumpplus.com: carousel HTML | where the page kept the code |
+| orchestrator | b2c.voegol.com.br: device id, flags, cache, event | **no** |
+
 **Sometimes the page kept the code itself.** A site that moves that work
 browser-side often leaves the same code in the page, inside an inert
 `<template>`, waiting for something to insert it. shonenjumpplus.com carries

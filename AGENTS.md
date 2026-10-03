@@ -228,6 +228,28 @@ takes arguments now, which means two rules:
 Both are mutation-tested. The second one fails 54 tests when it is wrong,
 which is the right shape for a contract everything else rests on.
 
+## When an exception is the right answer
+
+Three shapes, and only two of them are ours. A container that **loads** a
+tag - petzl's Maps - is `gtm-tag`. A container that **writes** into the page -
+shonenjumpplus's carousel - is answerable where the page kept the same code in
+a template. A container that **orchestrates** is not: b2c.voegol.com.br takes
+a device id from one GTM-injected script, feature flags from another through
+container code holding the vendor's deployment key in a container variable,
+caches them to `localStorage.mapStorageExp`, and the app waits on that cache
+before it will navigate.
+
+Two shortcuts were tried there and both failed, which is the useful part:
+stubbing the client's global (theirs is named `featureExperiment`, not the
+vendor's `experiment`), and seeding the cache so the wait completes - the page
+still did not navigate, because something downstream reads the flag VALUES.
+A resource can answer a contract; it cannot produce a vendor's data, and
+guessing a variant picks a side of someone's A/B test for them.
+
+Recognise that shape early and say so. An exception for the container is the
+honest answer, and an exception for the second script alone cannot work by
+construction - nothing requests it unless the container runs.
+
 ## The consent state, and why it is here at all
 
 A container loads the site's consent manager; replacing the loader takes the
