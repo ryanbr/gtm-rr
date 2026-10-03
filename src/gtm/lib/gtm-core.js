@@ -202,6 +202,7 @@ function consentRRGtm(a1 = '', a2 = '', a3 = '') {
         const consentState = report.installed === 'installed'
             ? assumeConsent()
             : 'left';
+        const tcf = report.installed === 'installed' ? tcfState() : 'left';
         try {
             w.console.info(
                 '[gtm-rr] ' + NAME + ' ' + VERSION +
@@ -212,6 +213,7 @@ function consentRRGtm(a1 = '', a2 = '', a3 = '') {
                 ' container=' + report.installed +
                 ' hide=' + report.hiding() +
                 ' consent=' + consentState +
+                ' tcf=' + tcf +
                 ' debug=' + report.level
             );
         } catch(ex) {
@@ -919,6 +921,134 @@ function consentRRGtm(a1 = '', a2 = '', a3 = '') {
             (held.length !== 0 ? ' held=' + held.join(',') : ''));
     };
 
+    // The other half of what a container's consent manager left behind, and
+    // the half a page cannot work around: the IAB TCF API.
+    //
+    // nowtv.com.tr is the worked example. Its container holds exactly one
+    // script - OneTrust's otSDKStub.js - and the video player's init loop is
+    //
+    //   var userMadeChoiceBefore =
+    //       localStorage.getItem("cookieChoiceMade") === "true";
+    //   setInterval(function() {
+    //     if (el != null && typeof ADMPlayer != 'undefined'
+    //         && userMadeChoiceBefore && oneTrustInitited && ...) { ... }
+    //
+    // where oneTrustInitited is set by initGoogleAds(tcData), and that has
+    // exactly one caller:
+    //
+    //   window.__tcfapi('addEventListener', 2, function(tcData, success) {
+    //     if (success && (tcData.eventStatus === 'tcloaded'
+    //         || tcData.eventStatus === 'useractioncomplete')) {
+    //       initGoogleAds(tcData); } });
+    //
+    // So with the container replaced __tcfapi never arrives, nothing calls
+    // that back, and the loop spins for ever. Their own GPT path gives up
+    // after 2 seconds with a warning; the player does not give up at all.
+    //
+    // What goes up is a refusal, not a consent: gdprApplies true and not one
+    // purpose, vendor, special feature or publisher consent in it. Measured
+    // against the live page, that is enough - the player initialises and
+    // three video elements appear, with gtm.js replaced AND gpt.js blocked
+    // outright, because their initGoogleAds sets its flag before it ever
+    // touches googletag.
+    //
+    // consent=all does NOT reach this. The group variables above are what a
+    // site reads to show its own content, and raising them is a judgement
+    // about that site's page. A TCF purpose consent is a message to every ad
+    // vendor on the page saying they may proceed, which is the one thing this
+    // resource must never say on someone's behalf.
+    //
+    // No __tcfapiLocator frame either, deliberately. That exists so third
+    // party frames can postMessage the CMP for a consent string, and there is
+    // nothing here for them to have.
+    const TCF = '__tcfapi';
+    const TCF_GAVE = 'consentRRGtmTcf';
+
+    const tcData = ( ) => ({
+        tcString: '',
+        tcfPolicyVersion: 4,
+        cmpId: 0,
+        cmpVersion: 0,
+        gdprApplies: true,
+        eventStatus: 'tcloaded',
+        cmpStatus: 'loaded',
+        isServiceSpecific: true,
+        useNonStandardTexts: false,
+        purposeOneTreatment: false,
+        publisherCC: 'AA',
+        purpose: { consents: {}, legitimateInterests: {} },
+        vendor: { consents: {}, legitimateInterests: {} },
+        specialFeatureOptins: {},
+        publisher: {
+            consents: {},
+            legitimateInterests: {},
+            customPurpose: { consents: {}, legitimateInterests: {} },
+            restrictions: {},
+        },
+    });
+
+    const answerTcf = ( ) => {
+        let next = 0;
+        return function(command, version, callback, parameter) {
+            if ( typeof callback !== 'function' ) { return; }
+            try {
+                if ( command === 'ping' ) {
+                    // Their ping answers with one argument, not two.
+                    callback({
+                        gdprApplies: true,
+                        cmpLoaded: true,
+                        cmpStatus: 'loaded',
+                        displayStatus: 'hidden',
+                        apiVersion: '2',
+                        cmpId: 0,
+                        cmpVersion: 0,
+                        gvlVersion: 3,
+                        tcfPolicyVersion: 4,
+                    });
+                    return;
+                }
+                if ( command === 'addEventListener' ) {
+                    const data = tcData();
+                    next += 1;
+                    data.listenerId = next;
+                    callback(data, true);
+                    return;
+                }
+                if ( command === 'removeEventListener' ) {
+                    callback(true);
+                    return;
+                }
+                if ( command === 'getTCData' ) {
+                    callback(tcData(), true);
+                    return;
+                }
+                // Anything else is a command this is not standing in for, and
+                // false is how their API says so.
+                callback(null, false);
+            } catch(ex) {
+            }
+        };
+    };
+
+    const tcfState = ( ) => {
+        let there = null;
+        try {
+            there = w[TCF];
+        } catch(ex) {
+            return 'left';
+        }
+        if ( typeof there === 'function' ) { return 'theirs'; }
+        try {
+            const answer = answerTcf();
+            answer.consentRRGtm = VERSION;
+            w[TCF] = answer;
+            w[TCF_GAVE] = VERSION;
+        } catch(ex) {
+            return 'left';
+        }
+        return 'refusal';
+    };
+
     // What a filter asked for, applied to what this file's own call already
     // put up a moment ago. Removing it where the answer is off, raising it
     // where the answer is all.
@@ -941,6 +1071,17 @@ function consentRRGtm(a1 = '', a2 = '', a3 = '') {
                     delete w.OneTrust;
                 }
                 delete w[GAVE];
+            } catch(ex) {
+            }
+            // And the TCF answer, which is the same judgement in the IAB's
+            // own API: a reader running consent-rr gets the real refusal
+            // transmitted, and two stand-ins answering at once is one too
+            // many.
+            try {
+                if ( w[TCF] && w[TCF].consentRRGtm === VERSION ) {
+                    delete w[TCF];
+                    delete w[TCF_GAVE];
+                }
             } catch(ex) {
             }
             say('consent=off');

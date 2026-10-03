@@ -1108,4 +1108,72 @@ export default [
         from: '            tag.init();',
         to: '            tag.site = tag.site;',
     },
+    {
+        label: 'tcf: GDPR does not apply, which is a consent of its own',
+        file: GTM,
+        from: '        gdprApplies: true,\n        eventStatus:',
+        to: '        gdprApplies: false,\n        eventStatus:',
+    },
+    {
+        label: 'tcf: the banner is still up, so nothing proceeds',
+        file: GTM,
+        from: "        eventStatus: 'tcloaded',",
+        to: "        eventStatus: 'cmpuishown',",
+    },
+    {
+        label: 'tcf: purposes come back consented',
+        file: GTM,
+        from: '        purpose: { consents: {}, legitimateInterests: {} },',
+        to: '        purpose: { consents: { 1: true, 3: true }, legitimateInterests: {} },',
+    },
+    {
+        label: 'tcf: vendors come back consented',
+        file: GTM,
+        from: '        vendor: { consents: {}, legitimateInterests: {} },',
+        to: '        vendor: { consents: { 755: true }, legitimateInterests: {} },',
+    },
+    {
+        label: 'tcf: a listener is registered and never called',
+        file: GTM,
+        from: '                    callback(data, true);\n                    return;',
+        to: '                    return;',
+    },
+    {
+        label: 'tcf: an unknown command is answered as if it worked',
+        file: GTM,
+        from: '                callback(null, false);',
+        to: '                callback(tcData(), true);',
+    },
+    {
+        label: 'tcf: a real CMP is replaced',
+        file: GTM,
+        from: "        if ( typeof there === 'function' ) { return 'theirs'; }",
+        to: "        if ( false ) { return 'theirs'; }",
+    },
+    {
+        label: 'tcf: answered on a page that had no container',
+        file: GTM,
+        from: "        const tcf = report.installed === 'installed' ? tcfState() : 'left';",
+        to: '        const tcf = tcfState();',
+    },
+    {
+        label: 'tcf: consent=off leaves it answering',
+        file: GTM,
+        from: '                if ( w[TCF] && w[TCF].consentRRGtm === VERSION ) {\n' +
+            '                    delete w[TCF];\n' +
+            '                    delete w[TCF_GAVE];\n' +
+            '                }',
+        to: '                if ( false ) { delete w[TCF]; }',
+    },
+    {
+        // Not a shared-object mutation: writing one needs a code shape this
+        // does not have, and a substitution naming an undefined variable
+        // would be "caught" for throwing rather than for sharing anything.
+        // The listener id is the other half of their addEventListener
+        // contract - removeEventListener is given it back.
+        label: 'tcf: a listener comes back without an id to remove it by',
+        file: GTM,
+        from: '                    data.listenerId = next;',
+        to: '                    next += 0;',
+    },
 ];

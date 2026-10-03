@@ -45,7 +45,7 @@ is one setting on **one line**: the name, then every URL you want, separated
 by spaces.
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.13.0/dist/gtm-rr-all.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.14.0/dist/gtm-rr-all.js
 ```
 
 **One URL carries all three.** A resources file holds as many resources as it
@@ -57,7 +57,7 @@ built from the same files and the tests check it holds them unchanged.
 To install only some of them, name those instead - still on the one line:
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.13.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.13.0/dist/gtm-tag.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.14.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.14.0/dist/gtm-tag.js
 ```
 
 **One URL per line does not work, and fails quietly.** uBO reads a hidden
@@ -76,7 +76,7 @@ straight away: the parsed set is cached in a selfie, invalidated on
 reason to pin a tag.
 
 These are pinned to a release, so an install stays where it is until you move
-it. `main` in place of `v1.13.0` follows the branch instead, which is useful for
+it. `main` in place of `v1.14.0` follows the branch instead, which is useful for
 testing a fix and not for leaving in place.
 
 **Use the redirect and the scriptlet together.** `filters/gtm.txt` carries the
@@ -613,6 +613,60 @@ working. The summary line says which happened: `consent=content`,
 where this never stood in for the container.
 
 [consent-rr]: https://github.com/ryanbr/consent-rr
+
+#### And the same question asked through the IAB's API
+
+`OptanonActiveGroups` is what a site reads to show its own content. `__tcfapi`
+is what everything else on the page reads, and a container's consent manager
+is often the only thing that provides it. nowtv.com.tr is the worked example -
+its container holds exactly one script, OneTrust's `otSDKStub.js` - and its
+video player's init loop is held behind a flag with one source:
+
+```js
+window.__tcfapi('addEventListener', 2, function(tcData, success) {
+    if (success && (tcData.eventStatus === 'tcloaded'
+        || tcData.eventStatus === 'useractioncomplete')) {
+      initGoogleAds(tcData); } });          // sets oneTrustInitited = true
+```
+
+Replace the loader and `__tcfapi` never arrives, nothing calls that back, and
+the loop spins for ever. Their GPT path gives up after two seconds with a
+warning; the player does not give up at all.
+
+**So this answers it, and the answer is a refusal.** `gdprApplies: true`, and
+not one purpose, vendor, special feature or publisher consent in it - the
+strictest thing the API can say. Measured against the live page, that is
+enough to get `oneTrustInitited` true and the player constructed where before
+both were false. No filter: the redirect alone.
+
+`consent=all` deliberately does **not** reach it. The group variables are a
+judgement about a site showing its own content; a TCF purpose consent is a
+message to every ad vendor on the page saying they may proceed, and that is
+the one thing this resource must never say on someone's behalf. `consent=off`
+removes it, for anyone running consent-rr. The summary line says which:
+`tcf=refusal`, `tcf=theirs` where a real CMP is already answering, or
+`tcf=left` where this never stood in for a container.
+
+There is no `__tcfapiLocator` frame, deliberately: that exists so third party
+frames can `postMessage` the CMP for a consent string, and there is nothing
+here for them to have.
+
+**Two things this does not fix on that page, and they are worth separating.**
+`localStorage.cookieChoiceMade` is the site's own "the banner has been dealt
+with" flag, which is site-specific and already has a uBO scriptlet - and
+`'true'` is one of uBO's safe values, so the untrusted form does it:
+
+```
+www.nowtv.com.tr##+js(set-local-storage-item, cookieChoiceMade, true)
+```
+
+And their player is `/js/app.js`, first party, which touches `googletag` 47
+times. That is a GPT dependency inside the player itself, nothing to do with
+the container, so if `gpt.js` has to be allowed for playback that is a
+question about uBO's GPT surrogate and not something this resource can answer.
+Reported from the field and not reproduced here: playback on that site does
+not start in a headless browser even with everything allowed, so the claim is
+recorded rather than measured.
 
 ### A wait with a name only the page knows
 

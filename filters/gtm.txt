@@ -208,6 +208,27 @@ www.medibankoshc.com.au##+js(gtm-tag, https://lptag.liveperson.net/tag/tag.js?si
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+! The IAB TCF API, where a container's consent manager was the only thing
+! providing it. NO FILTER IS NEEDED: googletagmanager_gtm answers __tcfapi
+! wherever it stood in for a container and nothing else is answering.
+!
+! What it answers with is a refusal - gdprApplies true, and not one purpose,
+! vendor, special feature or publisher consent. consent=all does not raise it:
+! a TCF purpose consent is a message to every ad vendor on the page, which is
+! not this resource's to send. consent=off removes it.
+!
+! nowtv.com.tr is the worked example. Its container holds one script,
+! OneTrust's otSDKStub.js, and the video player's init loop waits on a flag
+! set only from a __tcfapi tcloaded callback - so with the container replaced
+! it spins for ever.
+!
+! That page needs one more thing, which is its own flag rather than anything
+! GTM left behind:
+!
+!   www.nowtv.com.tr##+js(set-local-storage-item, cookieChoiceMade, true)
+! -----------------------------------------------------------------------------
+
+! -----------------------------------------------------------------------------
 ! Where a page waits for the global an SDK the container would have injected
 ! creates. The container installs someone else's script, that script defines
 ! a global, and the page polls for it - sometimes with no timeout anywhere in
