@@ -84,10 +84,9 @@
 
 */
 
-// @include ../../shared/lib/core.js
-
-function consentRRGtm() {
+function consentRRGtm(selector = '', needs = '', from = '') {
     const w = window;
+    const doc = w.document;
     const NAME = 'googletagmanager_gtm';
     const VERSION = '@@VERSION@@';
 
@@ -174,7 +173,288 @@ function consentRRGtm() {
             );
         } catch(ex) {
         }
+        // Where a real container answered, nothing went missing: its own tags
+        // do whatever writing into the page they do.
+        if ( report.installed === 'installed' ) { scan(); }
     };
+
+    const say = what => {
+        try {
+            w.console.info('[gtm-rr] ' + NAME + ' ' + VERSION + ' ' + what);
+        } catch(ex) {
+        }
+    };
+
+    // A container does not only load tags, it also writes into the page - and
+    // a site that has moved that work browser-side often leaves the same code
+    // in the page, inside a <template>, where it waits for something to
+    // insert it. shonenjumpplus.com is the worked example: four
+    //
+    //   <template class="js-browser-html-setting"><script> ... </script></template>
+    //
+    // blocks, one per banner area, each filling its own container and ending
+    // with the event the page's carousel waits for. The HTML is the site's
+    // own and already in the page; nothing had inserted it, and the container
+    // was what used to do that work.
+    //
+    // A template's content is inert, but a script taken out of it runs as
+    // soon as it lands in the document - it was never parser-inserted, so
+    // nothing marks it as already started. Only the scripts are taken, so
+    // none of the template's other markup is duplicated into the page.
+    //
+    // This is opt-in per site and takes the selector from the filter, because
+    // running whatever a page left in a template would be a way to un-gate a
+    // consent-gated embed. Nothing here is site-specific.
+    const MARKED = 'data-consent-rr-gtm';
+
+    // A script the page marked as something other than JavaScript is not
+    // ours to run: GTM's own templates carry type="text/gtmscript" exactly so
+    // that the browser leaves them alone.
+    const runnable = type => {
+        if ( type === '' ) { return true; }
+        if ( type === 'module' ) { return true; }
+        return /^(?:text|application)\/(?:java|ecma)script$/i.test(type);
+    };
+
+    // What a template has to look like before this runs it on its own, with
+    // no filter naming it. Each of these is about not running something the
+    // page is holding back on purpose:
+    //
+    //   nothing but code     a template carrying markup is a payload someone
+    //                        clones when they are ready, not deferred work
+    //   no src               a third-party script is the page's to load, and
+    //                        a consent-gated embed looks exactly like one
+    //   no embedding         code that creates a script, iframe, object or
+    //                        embed, or writes with document.write, can load a
+    //                        third party itself, which is the same objection
+    //
+    // shonenjumpplus.com's four pass all three: one inline script each,
+    // nothing else in the template, and not a mention of script or iframe in
+    // 27KB of banner HTML. A filter that names a selector overrides this -
+    // that is a person deciding, and some tags a container used to inject
+    // really are third-party scripts.
+    const reEmbeds =
+        /(?:<\s*|createElement\s*\(\s*["'])\s*(?:script|iframe|object|embed)|document\s*\.\s*write/i;
+
+    const codeOnly = template => {
+        let scripts = [];
+        let children = [];
+        try {
+            const content = template.content;
+            if ( content === null || content === undefined ) { return false; }
+            scripts = content.querySelectorAll('script');
+            children = content.children;
+        } catch(ex) {
+            return false;
+        }
+        if ( scripts.length === 0 ) { return false; }
+        if ( children.length !== scripts.length ) { return false; }
+        let code = '';
+        for ( const script of scripts ) {
+            try {
+                if ( script.hasAttribute('src') ) { return false; }
+                const type = String(script.getAttribute('type') || '').trim();
+                if ( runnable(type) === false ) { return false; }
+                code += script.textContent + '\n';
+            } catch(ex) {
+                return false;
+            }
+        }
+        return reEmbeds.test(code) === false;
+    };
+
+    const runTemplate = template => {
+        let scripts = [];
+        try {
+            const content = template.content;
+            if ( content === null || content === undefined ) { return [ 0, 0 ]; }
+            scripts = content.querySelectorAll('script');
+            if ( scripts.length === 0 ) { return [ 0, 0 ]; }
+            template.setAttribute(MARKED, VERSION);
+        } catch(ex) {
+            return [ 0, 0 ];
+        }
+        let ran = 0;
+        let left = 0;
+        for ( const script of scripts ) {
+            let type = '';
+            let src = '';
+            try {
+                type = String(script.getAttribute('type') || '').trim();
+                src = String(script.getAttribute('src') || '').trim();
+            } catch(ex) {
+            }
+            if ( runnable(type) === false ) {
+                left += 1;
+                continue;
+            }
+            try {
+                // Built fresh rather than cloned, so what lands in the
+                // document is the script and nothing around it.
+                const copy = doc.createElement('script');
+                if ( type !== '' ) { copy.type = type; }
+                if ( src !== '' ) { copy.src = src; }
+                else { copy.textContent = script.textContent; }
+                const where = doc.head || doc.documentElement;
+                if ( where === null ) { continue; }
+                where.appendChild(copy);
+                ran += 1;
+            } catch(ex) {
+            }
+        }
+        return [ ran, left ];
+    };
+
+    const missing = ( ) => {
+        if ( needs === '' ) { return false; }
+        try {
+            return w[needs] === undefined;
+        } catch(ex) {
+        }
+        return false;
+    };
+
+    // Answers whether there is nothing left to wait for.
+    const activate = ( ) => {
+        let found = [];
+        try {
+            found = doc.querySelectorAll(selector);
+        } catch(ex) {
+            say('refused=selector selector=' + selector);
+            return;
+        }
+        let ran = 0;
+        let left = 0;
+        let seen = 0;
+        for ( const template of found ) {
+            try {
+                if ( template.localName !== 'template' ) { continue; }
+                if ( template.hasAttribute(MARKED) ) { continue; }
+            } catch(ex) {
+                continue;
+            }
+            seen += 1;
+            const counts = runTemplate(template);
+            ran += counts[0];
+            left += counts[1];
+        }
+        if ( seen === 0 ) { return false; }
+        say('ran=' + ran + ' templates=' + seen +
+            (left !== 0 ? ' left=' + left : '') + ' from=' + selector);
+        return true;
+    };
+
+    // After the document has parsed, and one task later: a scriptlet runs at
+    // document_start, so its DOMContentLoaded listener is registered before
+    // any the page adds and would run before them - and a template's script
+    // is usually written against what the page sets up in those. Then once
+    // more at load, for a template that was not there the first time.
+    // Quick while it is still a race, slower afterwards, the way gtm-tag
+    // waits: a library a template's script is written against can arrive
+    // late, and a template itself can be added to the page later.
+    const EVERY = 50;
+    const SLOWER = 500;
+    const RACE = 1000;
+    const UNTIL = 10000;
+    let waited = 0;
+
+    const look = ( ) => {
+        if ( missing() === false && activate() ) { return; }
+        const step = waited < RACE ? EVERY : SLOWER;
+        waited += step;
+        if ( waited >= UNTIL ) {
+            say(missing() ? 'gave-up=' + needs : 'none=' + selector);
+            return;
+        }
+        try {
+            w.setTimeout(look, step);
+        } catch(ex) {
+        }
+    };
+
+    // No filter named a selector: every template the page carries that is
+    // plainly deferred code and nothing else. Only where this stood in for a
+    // container, because that is the work that went missing - a page whose
+    // own container loaded is not missing anything.
+    const generic = ( ) => {
+        let found = [];
+        try {
+            found = doc.querySelectorAll('template');
+        } catch(ex) {
+            return;
+        }
+        let ran = 0;
+        let seen = 0;
+        let held = 0;
+        for ( const template of found ) {
+            try {
+                if ( template.hasAttribute(MARKED) ) { continue; }
+            } catch(ex) {
+                continue;
+            }
+            if ( codeOnly(template) === false ) {
+                held += 1;
+                continue;
+            }
+            seen += 1;
+            ran += runTemplate(template)[0];
+        }
+        if ( ran === 0 ) { return; }
+        say('ran=' + ran + ' templates=' + seen +
+            (held !== 0 ? ' held=' + held : '') + ' from=page');
+    };
+
+    // Twice, and no polling: a page's own deferred code is in the markup it
+    // was served. A filter that names a selector gets the waiting, because
+    // then there is something specific to wait for.
+    const scan = ( ) => {
+        const soon = ( ) => {
+            try {
+                w.setTimeout(generic, 0);
+            } catch(ex) {
+                generic();
+            }
+        };
+        try {
+            if ( doc.readyState === 'loading' ) {
+                doc.addEventListener('DOMContentLoaded', soon, { once: true });
+            } else {
+                soon();
+            }
+            if ( doc.readyState === 'complete' ) { soon(); }
+            else { w.addEventListener('load', soon, { once: true }); }
+        } catch(ex) {
+        }
+    };
+
+    const templates = ( ) => {
+        const begin = ( ) => {
+            try {
+                w.setTimeout(look, 0);
+            } catch(ex) {
+                look();
+            }
+        };
+        try {
+            if ( doc.readyState === 'loading' ) {
+                doc.addEventListener('DOMContentLoaded', begin, { once: true });
+            } else {
+                begin();
+            }
+        } catch(ex) {
+        }
+    };
+
+    // Nothing to install twice: the resource is injected and then called
+    // again by uBO for each filter that asked for it, so only the call this
+    // file makes itself goes on to stand in for the container. A second
+    // DELIVERY - the redirect landing as well as the scriptlet - has its own
+    // copy of this file and so its own self call, which is what reports
+    // push=already container=kept.
+    if ( from !== 'self' ) {
+        if ( selector !== '' ) { templates(); }
+        return;
+    }
 
     const core = consentRRGtmCore({
         name: NAME,
@@ -192,4 +472,10 @@ function consentRRGtm() {
         command,
     });
     if ( core !== null ) { announce(core); }
+    if ( selector !== '' ) { templates(); }
 }
+
+// Last, so that the first function declaration in the built resource is the
+// one above: uBO reads the name off the front of a resource and calls that
+// with the filter's arguments.
+// @include ../../shared/lib/core.js

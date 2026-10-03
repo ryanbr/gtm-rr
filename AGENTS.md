@@ -132,6 +132,21 @@ tag's url goes in the filter and only that one script loads.
   document has parsed as well. Field-found, not reviewed-found: the report was
   that allowing the container made the browser ask for the user's location and
   the map open, which is what the real callback does first.
+- **A container's other job is writing into the page, and no resource can
+  stand in for that** - the content is the container. But a site that has
+  moved that work browser-side often leaves the same code in the page in an
+  inert `<template>`, and running those scripts is something a resource can
+  do: a script taken out of a template runs on insertion, because it was never
+  parser-inserted. Only the scripts, never the surrounding markup.
+- **That one runs with no filter, so the rule for when it runs is the whole
+  safety argument.** A page may keep a consent-gated embed in a template, and
+  running whatever is in one would un-gate it. So: only where this stood in
+  for the container, only a template holding code and no other markup, only
+  inline scripts, and only code that creates no script, iframe, object or
+  embed and does not `document.write`. Those were checked against the live
+  page before they were written down - all four of shonenjumpplus's templates
+  pass - and each one has a mutation. A selector in a filter overrides them,
+  which is a person deciding instead of a rule guessing.
 - **A scriptlet filter cannot be scoped to a path, so the trigger has to come
   from somewhere.** A container holds its tags behind conditions, and petzl's
   Maps tag is behind `_cn` on the data layer variable `PageType` - which the
@@ -182,6 +197,28 @@ considered and is a trap: uBO names a resource after its **first** function, so
 with a string where it wants its options object, and the two entry points would
 have to tell themselves apart at runtime. See the next section for why that
 class of thing is expensive.
+
+## The entry function has to be first, and marks its own call
+
+uBO names a resource after the **first** function declaration in it, so that
+is the only function a filter's arguments can reach. `googletagmanager_gtm`
+takes arguments now, which means two rules:
+
+- `src/gtm/lib/gtm-core.js` defines `consentRRGtm(selector, needs, from)`
+  **before** the `// @include` of the shared core. Declarations hoist, so the
+  order is only about what uBO reads off the front of the built file. Put the
+  include back at the top and the resource is named `consentRRGtmCore` again,
+  arguments land in its `options` parameter, and a filter does nothing.
+- The resource is injected **and** called once per filter, so the call it makes
+  itself passes `'self'`, and only that one stands in for the container.
+  Without the marker either nothing installs or it installs twice and says so
+  twice. A second *delivery* - the redirect landing as well as the scriptlet -
+  has its own copy of the file and so its own self call, which is what reports
+  `push=already container=kept`; that diagnostic is the reason the guard is on
+  the marker rather than on a window flag.
+
+Both are mutation-tested. The second one fails 54 tests when it is wrong,
+which is the right shape for a contract everything else rests on.
 
 ## How uBO delivers a scriptlet's arguments
 

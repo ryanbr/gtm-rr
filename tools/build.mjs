@@ -204,6 +204,18 @@ const build = async ( ) => {
     const bundle = bundled.join('\n');
     new vm.Script(bundle, { filename: BUNDLE });
     await fs.writeFile(path.join(outDir, BUNDLE), bundle, 'utf8');
+
+    // A resource that no longer exists leaves its built file behind, and
+    // dist/ is what uBO fetches: a removed resource would go on being served
+    // to anyone whose userResourcesLocation still names it, and the tests
+    // would read it as if it shipped.
+    const written = new Set([ ...entries.map(e => e.name), BUNDLE ]);
+    for ( const name of await fs.readdir(outDir) ) {
+        if ( name.endsWith('.js') === false ) { continue; }
+        if ( written.has(name) ) { continue; }
+        await fs.rm(path.join(outDir, name));
+        console.log(`  dist/${name}: removed, no longer built from src/`);
+    }
     console.log(
         `  dist/${BUNDLE}: all ${bundled.length}, ${bundle.length} bytes`
     );

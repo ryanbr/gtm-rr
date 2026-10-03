@@ -555,6 +555,97 @@ export default [
         to: "    const bundle = bundled.join('');",
     },
     {
+        label: 'templates: run without a filter asking for them',
+        file: GTM,
+        from: "    if ( from !== 'self' ) {\n" +
+            "        if ( selector !== '' ) { templates(); }\n" +
+            '        return;\n    }',
+        to: '    templates();',
+    },
+    {
+        label: 'templates: the resource stands in for the container twice',
+        file: 'src/gtm/googletagmanager_gtm.js',
+        from: "consentRRGtm('', '', 'self');",
+        to: 'consentRRGtm();',
+    },
+    {
+        label: 'templates: run on a page this never stood in for',
+        file: GTM,
+        from: "        if ( report.installed === 'installed' ) { scan(); }",
+        to: '        scan();',
+    },
+    {
+        label: 'templates: markup in a template is no objection',
+        file: GTM,
+        from: '        if ( children.length !== scripts.length ) { return false; }',
+        to: '',
+    },
+    {
+        label: 'templates: a src in a template is no objection',
+        file: GTM,
+        from: "                if ( script.hasAttribute('src') ) { return false; }",
+        to: '',
+    },
+    {
+        label: 'templates: code that would load a third party is run',
+        file: GTM,
+        from: '        return reEmbeds.test(code) === false;',
+        to: '        return true;',
+    },
+    {
+        label: 'templates: a page with nothing to run is reported anyway',
+        file: GTM,
+        from: '        if ( ran === 0 ) { return; }',
+        to: '',
+    },
+    {
+        label: 'templates: anything matching the selector is run',
+        file: GTM,
+        from: "                if ( template.localName !== 'template' ) { continue; }",
+        to: '',
+    },
+    {
+        label: 'templates: a named template is run again on every look',
+        file: GTM,
+        from: "                if ( template.localName !== 'template' ) { continue; }\n" +
+            '                if ( template.hasAttribute(MARKED) ) { continue; }',
+        to: "                if ( template.localName !== 'template' ) { continue; }",
+    },
+    {
+        label: 'templates: the page own code is run again on every look',
+        file: GTM,
+        from: '                if ( template.hasAttribute(MARKED) ) { continue; }\n' +
+            '            } catch(ex) {\n' +
+            '                continue;\n' +
+            '            }\n' +
+            '            if ( codeOnly(template) === false ) {',
+        to: '            } catch(ex) {\n' +
+            '                continue;\n' +
+            '            }\n' +
+            '            if ( codeOnly(template) === false ) {',
+    },
+    {
+        label: 'templates: a script the page marked as not JavaScript is run',
+        file: GTM,
+        from: '            if ( runnable(type) === false ) {\n' +
+            '                left += 1;\n' +
+            '                continue;\n            }',
+        to: '',
+    },
+    {
+        label: 'templates: the global they need is not waited for',
+        file: GTM,
+        from: "        if ( needs === '' ) { return false; }",
+        to: '        if ( true ) { return false; }',
+    },
+    {
+        label: 'templates: one look and no more',
+        file: GTM,
+        from: '        try {\n            w.setTimeout(look, step);\n' +
+            '        } catch(ex) {\n        }',
+        to: '',
+    },
+    {
         label: 'tag: no url at all is loaded as a url',
         file: TAG,
         from: '    if ( given(url) === false ) { return; }',

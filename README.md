@@ -42,7 +42,7 @@ is one setting on **one line**: the name, then every URL you want, separated
 by spaces.
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.4.1/dist/gtm-rr-all.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.5.0/dist/gtm-rr-all.js
 ```
 
 **One URL carries all three.** A resources file holds as many resources as it
@@ -54,7 +54,7 @@ built from the same files and the tests check it holds them unchanged.
 To install only some of them, name those instead - still on the one line:
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.4.1/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.4.1/dist/gtm-tag.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.5.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.5.0/dist/gtm-tag.js
 ```
 
 **One URL per line does not work, and fails quietly.** uBO reads a hidden
@@ -73,7 +73,7 @@ straight away: the parsed set is cached in a selfie, invalidated on
 reason to pin a tag.
 
 These are pinned to a release, so an install stays where it is until you move
-it. `main` in place of `v1.4.1` follows the branch instead, which is useful for
+it. `main` in place of `v1.5.0` follows the branch instead, which is useful for
 testing a fix and not for leaving in place.
 
 **Use the redirect and the scriptlet together.** `filters/gtm.txt` carries the
@@ -322,7 +322,7 @@ The worked example is petzl.com's dealer locator, where the chain is
 middle links are Custom HTML tags inside `GTM-MWKBJV`:
 
 ```
-"function":"__html","priority":999,"metadata":["map"],
+"function":"__html","priority":999,
 "vtp_html":"<script src=\"https://cdn.cookielaw.org/scripttemplates/otSDKStub.js\"
              data-domain-script=\"bb3af1ef-…\">"
 "vtp_html":"… a.src=\"https://maps.googleapis.com/maps/api/js?v=3.31
@@ -390,12 +390,74 @@ trigger through the container's rules, predicates and macros, and prints the
 ready-made line - callback, condition and all. Where the trigger is not a
 single data layer test it prints what the container checks instead, for you to
 read. Watch for a script that appears twice behind different triggers: petzl's
-Maps tag is in there for their sandbox hosts as well as live. Their own `"metadata"` field often names the purpose -
-both entries above are tagged `["map"]`.
+Maps tag is in there for their sandbox hosts as well as live.
+
+A tag's `"metadata"` is **not** a label: it is a GTM key-value map serialised
+as `["map", key, value, …]`, so the `["map"]` on petzl's tags is an *empty*
+map and means nothing. Every tag in another container read for this carried
+the same thing. The tool prints the pairs when there are any and stays quiet
+otherwise.
+
+**A container can also hold page functionality without loading anything.**
+shonenjumpplus.com's container fills ten carousel slides with campaign HTML,
+dates hardcoded, and then fires the event the page's carousel waits for.
+Nothing can be put in a filter for *that*: the content is the container. The
+tool reports those tags separately, with the elements they write into, because
+the first useful question is whether the page still has them - a container
+often keeps tags for markup the site has moved on from. Theirs target `.gtm-*`
+classes the page no longer carries.
+
+**Sometimes the page kept the code itself.** A site that moves that work
+browser-side often leaves the same code in the page, inside an inert
+`<template>`, waiting for something to insert it. shonenjumpplus.com carries
+four, one per banner area:
+
+```html
+<div class="html-setting-top-banner"><div class="slide-item"></div>…</div>
+<template class="js-browser-html-setting"><script>
+  var items = $('.html-setting-top-banner > div');
+  if (today < starttime1) { items.eq(0).html('<a href="…"><img src="…"></a>'); … }
+  $(document).trigger('sjp:bannerload')
+</script></template>
+```
+
+**`googletagmanager_gtm` runs those on its own** - no filter, no selector, the
+redirect on its own is enough. A template's content is inert, but a script
+taken out of one runs as soon as it lands in the document: it was never
+parser-inserted, so nothing marks it as already started. Only the scripts are
+taken, so none of the template's other markup is duplicated into the page, and
+each template is run once.
+
+Running whatever a page holds back in a template would be a way to un-gate a
+consent-gated embed, so it is deliberately narrow. All four of these have to
+hold:
+
+| | why |
+|---|---|
+| this stood in for the container (`container=installed`) | a page whose own container answered is not missing anything |
+| the template holds script(s) and **no other markup** | markup in a template is a payload someone clones when they are ready, not deferred work |
+| every script is **inline**, no `src` | a third-party script is the page's own to load, and a gated embed looks exactly like one |
+| the code creates no `script`, `iframe`, `object` or `embed`, and does not `document.write` | code can load a third party itself, which is the same objection |
+
+shonenjumpplus.com's four pass all of them: one inline script each, nothing
+else inside, and not a mention of `script` or `iframe` in 27 KB of banner
+HTML. The line it prints is `ran=4 templates=4 from=page`.
+
+Where that is too strict - and some tags a container injected really are
+third-party scripts - a filter can name the selector instead, which is a
+person deciding rather than a rule guessing:
+
+```
+shonenjumpplus.com##+js(googletagmanager_gtm, template.js-browser-html-setting)
+```
+
+That path also keeps the waiting: a second argument names a global the scripts
+need first (`…, template.js-x, jQuery`), and it goes on looking for ten
+seconds, so a template added after the page parsed is still picked up.
 
 Most containers need none of this. Of three real ones: `GTM-MWKBJV` injects
-seven scripts of which the two above are the only page functionality,
-`GTM-KJZD388` injects eight and every one is ad or analytics, and
+two scripts that are page functionality, `GTM-KJZD388` injects eight and every
+one is ad or analytics, and
 `GTM-W4F8P893` injects no script at all.
 
 **Where you do let a container through, this resource stays out of its way.**

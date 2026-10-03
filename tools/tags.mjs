@@ -39,6 +39,12 @@ const unescape = text => text
     .replace(/\\x3d/gi, '=')
     .replace(/\\x26/gi, '&')
     .replace(/\\x2f/gi, '/')
+    // Their compiler escapes these inside strings too: a selector reads as
+    // ".gtm-top-banner \\x3e div" and a match that stops at a backslash
+    // misses it, which is how a tag writing into the page went unreported.
+    .replace(/\\x3c/gi, '<')
+    .replace(/\\x3e/gi, '>')
+    .replace(/\\x27/gi, "'")
     .replace(/\\u003c/gi, '<')
     .replace(/\\u003e/gi, '>')
     .replace(/\\"/g, '"');
@@ -155,6 +161,7 @@ const triggersFrom = text => {
 // the Maps entry in petzl's container are tagged ["map"].
 const tagsFrom = text => {
     const found = [];
+    const writes = [];
     const triggers = triggersFrom(text);
     const entries = splitArray(text, 'tags');
     for ( let index = 0; index < entries.length; index++ ) {
@@ -163,20 +170,39 @@ const tagsFrom = text => {
         const raw = /"vtp_html":"((?:[^"\\]|\\.)*)"/.exec(entry);
         if ( raw === null ) { continue; }
         const html = unescape(raw[1]);
+        // Scripts only. A src= anywhere would do, and did: shonenjumpplus's
+        // container writes banner HTML into the page, and every <img src> in
+        // it was reported as a script the container loads.
         const urls = [];
-        const src = /src\s*=\s*\\?["']([^"'\\]+)/g;
-        let one = src.exec(html);
-        while ( one !== null ) {
-            urls.push(one[1]);
-            one = src.exec(html);
+        for ( const re of [
+            // <script ... src="...">
+            /<script[^>]*?\ssrc\s*=\s*\\?["']?([^"'\s>\\]+)/gi,
+            // a.src = "..." next to a createElement('script')
+            /\.src\s*=\s*\\?["']([^"'\\]+)/g,
+        ] ) {
+            let one = re.exec(html);
+            while ( one !== null ) {
+                const url = one[1];
+                const fromScriptEl = re.source.startsWith('\\.src') === false ||
+                    /createElement\(\\?["']script/i.test(html);
+                if ( fromScriptEl && isWholeUrl(url) ) { urls.push(url); }
+                one = re.exec(html);
+            }
         }
         // A loader asked for with a callback needs that name to exist first.
         const callback = /[?&]callback=([A-Za-z0-9_$.]+)/.exec(html);
-        // Only this entry's own metadata: it sits before vtp_html in the
-        // same object, and a window that reaches into the next tag would
-        // label every script with the first one it found.
+        // Their "metadata" is a GTM key-value map, serialised as
+        // ["map", key, value, ...] - so a bare ["map"] is an EMPTY map and
+        // says nothing at all. Printing it as if it named the tag's purpose
+        // was a misreading: petzl's map tags carry ["map"] and so does every
+        // tag in shonenjumpplus's container. Only the pairs are worth a word.
         const head = entry.slice(0, entry.indexOf('"vtp_html"'));
-        const metadata = /"metadata":\[([^\]]*)\][^{]*$/.exec(head);
+        const metaRaw = /"metadata":\[([^\]]*)\][^{]*$/.exec(head);
+        const pairs = metaRaw === null
+            ? []
+            : metaRaw[1].split(',').map(s => s.trim().replace(/^"|"$/g, ''))
+                .filter(s => s !== '' && s !== 'map');
+        const metadata = pairs.length !== 0 ? pairs.join('=') : '';
         // Only a data layer variable tested for a substring or an exact
         // value: that is what gtm-tag can be given. Anything else is for a
         // person to read.
@@ -185,12 +211,29 @@ const tagsFrom = text => {
             found.push({
                 url,
                 callback: callback !== null ? callback[1] : '',
-                metadata: metadata !== null ? metadata[1] : '',
+                metadata,
                 conditions,
             });
         }
+        // A tag that writes into the page rather than loading anything. This
+        // is the other way a container holds page functionality, and no
+        // resource can stand in for it: shonenjumpplus's container fills ten
+        // carousel slides with campaign HTML and hardcoded dates, then fires
+        // the event the page's carousel waits for. There is nothing to put in
+        // a filter - only something to know before promising a fix.
+        if ( /innerHTML|\.html\(|insertAdjacent|appendChild|\.text\(/.test(html) ) {
+            const targets = new Set();
+            for ( const m of html.matchAll(
+                /(?:querySelector(?:All)?\(|\$\()\s*\\?["']([^"'\\]{2,60})["']/g
+            ) ) {
+                targets.add(m[1]);
+            }
+            if ( targets.size !== 0 ) {
+                writes.push({ targets: [ ...targets ], conditions });
+            }
+        }
     }
-    return found;
+    return { found, writes };
 };
 
 // Hosts that are plainly ad or analytics infrastructure. Not a filter list,
@@ -204,6 +247,12 @@ const KNOWN_TRACKERS = [
     'scorecardresearch.com', 'adnxs.com', 'pinterest', 'tiktok',
     'snapchat.com', 'sc-static.net', 'reddit.com', 'cct.google',
 ];
+
+// A src built from variables reads as its first literal piece, which can be
+// just a scheme: shonenjumpplus's Treasure Data tag is
+//   a.src = ("https:" === location.protocol ? "https:" : "http:") + "//cdn..."
+// and that is not a url anyone can put in a filter.
+const isWholeUrl = url => /^https?:\/\/[^/\s]+\./.test(url);
 
 const looksLikeTracker = url => {
     for ( const host of KNOWN_TRACKERS ) {
@@ -220,11 +269,26 @@ for ( const id of ids ) {
         console.log(`  ${id}: ${ex.message}`);
         continue;
     }
-    const tags = tagsFrom(text);
+    const { found: tags, writes } = tagsFrom(text);
     console.log(`\n${id}  (${Math.round(text.length / 1024)}KB)`);
+    const sayWrites = ( ) => {
+        if ( writes.length === 0 ) { return; }
+        const targets = new Set();
+        for ( const w of writes ) {
+            for ( const t of w.targets ) { targets.add(t); }
+        }
+        console.log(`  ${writes.length} tag(s) write into the page instead of` +
+            ' loading anything - no filter can stand in for these, the' +
+            ' content is in the container:');
+        for ( const t of [ ...targets ].sort() ) {
+            console.log(`      ${t}`);
+        }
+        console.log('  Check whether the page still has those elements: a' +
+            ' container often keeps tags for markup a site has moved on from.');
+    };
     if ( tags.length === 0 ) {
-        console.log('  no __html tag injects a script - nothing a container' +
-            ' holds that a page needs');
+        console.log('  no __html tag injects a script');
+        sayWrites();
         continue;
     }
     // The same script can be in a container more than once, behind different
@@ -262,13 +326,12 @@ for ( const id of ids ) {
     console.log(`  ${byUrl.size} scripts, of which ${trackers} are plainly ad` +
         ` or analytics infrastructure and are not listed.`);
     if ( rest.length === 0 ) {
-        console.log('  Nothing else - so this container holds nothing a page' +
-            ' needs.');
+        console.log('  Nothing else.');
+        sayWrites();
         continue;
     }
     console.log('  The rest, which is where page functionality would be:');
     for ( const { url, callback, metadata, when, conditions } of rest ) {
-
         console.log(`    ${url}` +
             `${metadata !== '' ? '   metadata=' + metadata : ''}`);
         console.log(`      <site>##+js(gtm-tag, ${url}` +

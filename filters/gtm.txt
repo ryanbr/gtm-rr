@@ -99,6 +99,33 @@
 example.com##+js(gtm-tag, https://host.example/thing.js)
 
 ! -----------------------------------------------------------------------------
+! Where a container's job was to write into the page rather than to load
+! anything, and the site has since moved that work browser-side and left the
+! same code in the page inside an inert <template>.
+!
+! NO FILTER IS NEEDED FOR THIS. googletagmanager_gtm runs the scripts in such
+! a template itself, wherever it stood in for a container, and only where the
+! template holds code and no other markup, every script in it is inline, and
+! none of that code creates a script, an iframe, an object or an embed or
+! calls document.write - because running whatever a page holds back in a
+! template would be a way to un-gate a consent-gated embed.
+!
+! shonenjumpplus.com is the worked example and needs nothing here: four such
+! templates, one per banner area, each filling its own container and ending
+! with the event the carousel waits for.
+!
+! A filter can name a selector where those rules are too strict - some tags a
+! container injected really are third-party scripts, and that is a person
+! deciding:
+!
+!   example.com##+js(googletagmanager_gtm, template.js-x)
+!
+! and a second argument names a global the template's scripts need first:
+!
+!   example.com##+js(googletagmanager_gtm, template.js-x, jQuery)
+! -----------------------------------------------------------------------------
+
+! -----------------------------------------------------------------------------
 ! Where a redirect cannot land at all - an inlined bundle, or a path a rule
 ! cannot match - the resource has nothing to stand in front of, and the
 ! scriptlet form would be answering for a loader that is still running. Use
