@@ -97,9 +97,10 @@ function consentRRGtm(a1 = '', a2 = '', a3 = '') {
     //   +js(googletagmanager_gtm, template.js-x, jQuery)
     //   +js(googletagmanager_gtm, event=aiRecommendGenerated)
     //   +js(googletagmanager_gtm, template=template.js-x, needs=jQuery)
+    //   +js(googletagmanager_gtm, stub=amplitude)
     //
     // A selector can hold an '=' of its own - template[data-x="y"] - so only
-    // these four keys count as named, and anything else falls through to the
+    // these keys count as named, and anything else falls through to the
     // position it was given in.
     const given = {};
     // A position kept is a position: an argument left empty does not move the
@@ -113,7 +114,7 @@ function consentRRGtm(a1 = '', a2 = '', a3 = '') {
         const at = arg.indexOf('=');
         const key = at > 0 ? arg.slice(0, at) : '';
         if ( key === 'template' || key === 'needs' || key === 'event' ||
-            key === 'from' || key === 'consent' )
+            key === 'from' || key === 'consent' || key === 'stub' )
         {
             given[key] = arg.slice(at + 1).trim();
             continue;
@@ -125,6 +126,7 @@ function consentRRGtm(a1 = '', a2 = '', a3 = '') {
     const event = given.event !== undefined ? given.event : '';
     const from = given.from !== undefined ? given.from : loose[2];
     const consentAsked = given.consent !== undefined ? given.consent : '';
+    const asked = given.stub !== undefined ? given.stub : '';
     const VERSION = '@@VERSION@@';
 
     let gaCalls = null;
@@ -797,6 +799,126 @@ function consentRRGtm(a1 = '', a2 = '', a3 = '') {
         }
     };
 
+    // A container does not only measure a page, it installs other people's
+    // SDKs into it - and a page then waits for the global that SDK creates.
+    // Standing in for the container means that script is never injected, so
+    // the global never arrives, and a page that waits for it with no timeout
+    // in the wait waits for ever.
+    //
+    // b2c.voegol.com.br/minhas-viagens/login is the worked example, and there
+    // is no end to its wait:
+    //
+    //   ngAfterViewInit() {
+    //     this.waitForWindowProp('amplitude').subscribe(a => {
+    //       this.goToLoginSmiles(this.culture, {
+    //         deviceId: a.getDeviceId(), sessionId: a.getSessionId() })); }
+    //   waitForWindowProp(name, every = 1200) {
+    //     return timer(0, every).pipe(
+    //       map(() => window[name]), filter(v => !!v), take(1)); }
+    //
+    // so the sign-in page polls for window.amplitude every 1.2 seconds and
+    // navigates to the identity provider the first time it is there. The
+    // container is what puts it there: an Amplitude tag that injects
+    // cdn.amplitude.com/libs/analytics-browser-gtm-wrapper-*, whose own tags
+    // then read amplitudeGTM.getDeviceId() back off the window. With this
+    // standing in, nothing injects the wrapper and the page never leaves the
+    // sign-in screen - no error, no timeout, nothing in the console.
+    //
+    // The name cannot be worked out here, which is why a filter names it. A
+    // container is JSON this resource never fetches - it is served instead of
+    // it - so there is nothing at runtime to read a vendor's global off, and
+    // a read of a property that is not there is not observable. What this
+    // provides is the shape rather than the name: a function that answers to
+    // any property with itself, and returns undefined however it is called,
+    // so a page can walk whatever path through it that SDK's API has.
+    //
+    // Undefined is the answer, not a plausible id. The page sends on what it
+    // gets -
+    //   ids?.deviceId && params.set('ampDeviceId', ids.deviceId)
+    // - so a device id invented here would be this resource minting a
+    // tracking id and then putting it in a URL bound for someone else, which
+    // is the line gtag('get', ...) already refuses to cross. Falsy leaves the
+    // parameter out and the sign-in carries on without it.
+    //
+    // Which is also why a call returns undefined rather than the stub again,
+    // even though chaining would then carry amplitude.getInstance().logEvent()
+    // the way that SDK's older API reads. A stub that answered its own calls
+    // would be truthy, and the pages that wait for a global wait in order to
+    // read values off it - a function where a device id goes is a function
+    // stringified into a URL. One level further on, a call's return is where
+    // an absent global throws today, so this is no worse there and ends the
+    // wait, which is the whole of what it is for.
+    //
+    // Several names take one argument, so they need uBO's own escape -
+    // +js(googletagmanager_gtm, stub=amplitude\,amplitudeGTM) - because the
+    // comma it splits arguments on would otherwise put the second one where
+    // needs= goes.
+    //
+    // Nothing is replaced: a global already there is left alone and said so,
+    // and the stub goes on as a plain assignment, so the real SDK arriving
+    // later overwrites it exactly as it would have overwritten nothing.
+    const reGLOBAL = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+    const STUBS = 4;
+
+    // The properties that have to answer for themselves. A stub that returns
+    // a function for 'then' is a thenable, and awaiting it is a second wait
+    // that never ends - this file exists to end those, not to add one.
+    const PASS = new Set([
+        'then', 'catch', 'finally', 'toString', 'toJSON', 'valueOf',
+        'constructor', 'prototype', 'length', 'name', 'call', 'apply', 'bind',
+    ]);
+
+    const stubFor = ( ) => {
+        const answer = function( ) { return undefined; };
+        let self = answer;
+        try {
+            self = new w.Proxy(answer, {
+                get: (target, key) => {
+                    if ( typeof key !== 'string' ) { return target[key]; }
+                    if ( PASS.has(key) ) { return target[key]; }
+                    return self;
+                },
+            });
+        } catch(ex) {
+            return answer;
+        }
+        return self;
+    };
+
+    const stubbing = ( ) => {
+        const names = [];
+        for ( const part of asked.split(',') ) {
+            const name = part.trim();
+            if ( reGLOBAL.test(name) === false ) { continue; }
+            if ( names.includes(name) ) { continue; }
+            names.push(name);
+            if ( names.length === STUBS ) { break; }
+        }
+        const made = [];
+        const held = [];
+        for ( const name of names ) {
+            let there = undefined;
+            try {
+                there = w[name];
+            } catch(ex) {
+                held.push(name);
+                continue;
+            }
+            if ( there !== undefined && there !== null ) {
+                held.push(name);
+                continue;
+            }
+            try {
+                w[name] = stubFor();
+                made.push(name);
+            } catch(ex) {
+                held.push(name);
+            }
+        }
+        say('stub=' + (made.length !== 0 ? made.join(',') : 'none') +
+            (held.length !== 0 ? ' held=' + held.join(',') : ''));
+    };
+
     // What a filter asked for, applied to what this file's own call already
     // put up a moment ago. Removing it where the answer is off, raising it
     // where the answer is all.
@@ -840,6 +962,9 @@ function consentRRGtm(a1 = '', a2 = '', a3 = '') {
     };
 
     if ( from !== 'self' ) {
+        // First: a page polling for a global may read it at any moment, and
+        // the ones that read it once read it early.
+        if ( asked !== '' ) { stubbing(); }
         if ( consentAsked !== '' ) { adjustConsent(); }
         if ( selector !== '' ) { templates(); }
         if ( event !== '' ) { telling(); }

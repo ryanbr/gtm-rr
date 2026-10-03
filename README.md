@@ -553,21 +553,59 @@ dataLayer.push({ event: 'experiment_ready_v2' })
 ```
 
 Device id from one injected script, feature flags from another, the
-orchestration and the vendor's deployment key in container tags, and the app
-waiting on that cache before it will navigate. `gtm-tag` can fetch the two
-scripts; it cannot be their tag manager. Satisfying the wait is not enough
-either - tested - because something downstream reads actual flag values to
-choose a branch, and inventing those is guessing which side of someone's A/B
-test a visitor belongs on.
+orchestration and the vendor's deployment key in container tags, and a cache
+the rest of the site reads. `gtm-tag` can fetch the two scripts; it cannot be
+their tag manager, and inventing flag values would be guessing which side of
+someone's A/B test a visitor belongs on.
 
-That is the shape where an exception is the honest answer, and worth
-recognising early:
+But the login redirect is not waiting on any of that, which took reading their
+app to establish. `/minhas-viagens/login` is a module-federation remote - the
+page shell, the host app and the sign-in screen are three separate bundles -
+and in the third one the whole gate is a global:
+
+```js
+ngAfterViewInit() {
+    this.waitForWindowProp('amplitude').subscribe(a => {
+        this.goToLoginSmiles(this.culture, {
+            deviceId: a.getDeviceId(), sessionId: a.getSessionId() }); }); }
+waitForWindowProp(name, every = 1200) {
+    return timer(0, every).pipe(
+        map(() => window[name]), filter(v => !!v), take(1)); }
+```
+
+No timeout, anywhere in it. `window.amplitude` is what their Amplitude tag's
+injected wrapper creates, so with the container replaced the page polls every
+1.2 seconds for ever and the sign-in screen never goes away - no error, no
+warning, nothing in the console. One filter ends it:
+
+```
+b2c.voegol.com.br##+js(googletagmanager_gtm, stub=amplitude)
+```
+
+**That makes the shape, not the name.** The stub is a function that answers to
+any property with itself and returns `undefined` however it is called, so a
+page can walk whatever path through it that SDK's API has. The name has to come
+from the filter: a container is JSON this resource never fetches - it is served
+*instead* of it - so there is nothing at runtime to read a vendor's global off,
+and a read of a property that is not there is not observable.
+
+`undefined` is the answer and not a plausible id, because the page sends what
+it gets straight on - `ids?.deviceId && params.set('ampDeviceId', …)` - and a
+device id invented here would be this resource minting a tracking id and then
+putting it in a URL bound for someone else. Falsy leaves the parameter out and
+the sign-in carries on without it. A global that is already there is left
+alone (`stub=none held=amplitude`), and the stub is a plain assignment, so a
+real SDK arriving later replaces it exactly as it would have replaced nothing.
+Several names need uBO's own escape, since it splits arguments on commas:
+`stub=amplitude\,amplitudeGTM`.
+
+So two of the three shapes answer, and the third is narrower than it looked:
 
 | the container is a… | example | can a resource stand in? |
 |---|---|---|
 | loader | petzl.com: Maps, OneTrust | yes - `gtm-tag` with the url |
 | writer | shonenjumpplus.com: carousel HTML | where the page kept the code |
-| orchestrator | b2c.voegol.com.br: device id, flags, cache, event | **no** |
+| orchestrator | b2c.voegol.com.br: device id, flags, cache, event | not the flag values - but the global a page waits for is one argument |
 
 **Sometimes the page kept the code itself.** A site that moves that work
 browser-side often leaves the same code in the page, inside an inert

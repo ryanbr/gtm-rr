@@ -892,4 +892,46 @@ export default [
         from: '            if ( waited >= UNTIL ) {',
         to: '            if ( false ) {',
     },
+    {
+        label: 'gtm: stub= is not a name, so it lands where needs= goes',
+        file: GTM,
+        from: "            key === 'from' || key === 'consent' || key === 'stub' )",
+        to: "            key === 'from' || key === 'consent' )",
+    },
+    {
+        label: 'gtm: nothing is stubbed',
+        file: GTM,
+        from: "        if ( asked !== '' ) { stubbing(); }",
+        to: '        if ( false ) { stubbing(); }',
+    },
+    {
+        label: 'gtm: a stub answers its own calls, so an id is a function',
+        file: GTM,
+        from: '        const answer = function( ) { return undefined; };',
+        to: '        const answer = function( ) { return self; };',
+    },
+    {
+        label: 'gtm: a stub answers for then, so awaiting it hangs',
+        file: GTM,
+        from: '                    if ( PASS.has(key) ) { return target[key]; }',
+        to: '                    if ( false ) { return target[key]; }',
+    },
+    {
+        label: 'gtm: a stub takes a name that is not one',
+        file: GTM,
+        from: '            if ( reGLOBAL.test(name) === false ) { continue; }',
+        to: '            if ( false ) { continue; }',
+    },
+    {
+        label: 'gtm: a stub list has no limit',
+        file: GTM,
+        from: '            if ( names.length === STUBS ) { break; }',
+        to: '            if ( false ) { break; }',
+    },
+    {
+        label: 'gtm: a stub replaces the global already there',
+        file: GTM,
+        from: '            if ( there !== undefined && there !== null ) {',
+        to: '            if ( false ) {',
+    },
 ];

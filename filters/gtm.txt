@@ -134,6 +134,34 @@ example.com##+js(gtm-tag, https://host.example/thing.js)
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
+! Where a page waits for the global an SDK the container would have injected
+! creates. The container installs someone else's script, that script defines
+! a global, and the page polls for it - sometimes with no timeout anywhere in
+! the wait, in which case the page never finishes loading and says nothing
+! about why.
+!
+! b2c.voegol.com.br's sign-in screen is the worked example (uAssets #32369):
+! their Amplitude tag injects the vendor's wrapper, the wrapper defines
+! window.amplitude, and the login component polls for it every 1.2 seconds
+! before it will redirect to the identity provider.
+!
+!   b2c.voegol.com.br##+js(googletagmanager_gtm, stub=amplitude)
+!
+! What goes up is a shape, not a vendor: a function that answers to any
+! property with itself and returns undefined however it is called. undefined
+! and not a plausible id, because what the page reads off it goes straight
+! into a URL bound for someone else, and a resource minting a tracking id is
+! not an improvement on the tracking. A global that is already there is left
+! alone, and a real SDK arriving later replaces the stub.
+!
+! The name has to be given, because there is nothing to read it off: this
+! resource is served instead of the container, so it never sees the container.
+! Several names need uBO's own comma escape:
+!
+!   example.com##+js(googletagmanager_gtm, stub=amplitude\,amplitudeGTM)
+! -----------------------------------------------------------------------------
+
+! -----------------------------------------------------------------------------
 ! Where a redirect cannot land at all - an inlined bundle, or a path a rule
 ! cannot match - the resource has nothing to stand in front of, and the
 ! scriptlet form would be answering for a loader that is still running. Use

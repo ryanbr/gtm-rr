@@ -228,27 +228,45 @@ takes arguments now, which means two rules:
 Both are mutation-tested. The second one fails 54 tests when it is wrong,
 which is the right shape for a contract everything else rests on.
 
-## When an exception is the right answer
+## Three shapes, and the one that was called unanswerable too early
 
-Three shapes, and only two of them are ours. A container that **loads** a
-tag - petzl's Maps - is `gtm-tag`. A container that **writes** into the page -
-shonenjumpplus's carousel - is answerable where the page kept the same code in
-a template. A container that **orchestrates** is not: b2c.voegol.com.br takes
-a device id from one GTM-injected script, feature flags from another through
-container code holding the vendor's deployment key in a container variable,
-caches them to `localStorage.mapStorageExp`, and the app waits on that cache
-before it will navigate.
+A container that **loads** a tag - petzl's Maps - is `gtm-tag`. A container
+that **writes** into the page - shonenjumpplus's carousel - is answerable
+where the page kept the same code in a template. A container that
+**orchestrates** looked like neither: b2c.voegol.com.br takes a device id from
+one GTM-injected script, feature flags from another through container code
+holding the vendor's deployment key in a container variable, caches them to
+`localStorage.mapStorageExp`, and the rest of the site reads that cache.
 
-Two shortcuts were tried there and both failed, which is the useful part:
-stubbing the client's global (theirs is named `featureExperiment`, not the
-vendor's `experiment`), and seeding the cache so the wait completes - the page
-still did not navigate, because something downstream reads the flag VALUES.
-A resource can answer a contract; it cannot produce a vendor's data, and
-guessing a variant picks a side of someone's A/B test for them.
+This file said an exception was the honest answer there. It was wrong, and the
+way it was wrong is worth keeping. Two shortcuts had been tried - stubbing the
+flag client's global, and seeding the cache so the wait completes - and
+neither made the login page navigate, so the conclusion drawn was "something
+downstream reads the flag VALUES". Nothing downstream does. The flag cache is
+not on the login path at all.
 
-Recognise that shape early and say so. An exception for the container is the
-honest answer, and an exception for the second script alone cannot work by
-construction - nothing requests it unless the container runs.
+`/minhas-viagens/login` is a module-federation remote: the bot-check shell,
+the host app and the sign-in screen are three separate bundles from three
+different URLs, and the gate was in the third one, which had not been read:
+
+```js
+this.waitForWindowProp('amplitude').subscribe(a => {
+    this.goToLoginSmiles(this.culture, {
+        deviceId: a.getDeviceId(), sessionId: a.getSessionId() }); });
+```
+
+A poll for one global, every 1.2s, with no timeout in it. That is `stub=`, and
+it is one argument. **Two failed shortcuts are not evidence that a page is
+unanswerable - they are evidence that the gate has not been found yet.** The
+tell was there: a seeded cache produced no timeout warning and no navigation,
+which means nothing was waiting on the cache. Read every bundle the route
+loads before calling a page's wait unanswerable, and when a manifest or a
+remote entry is in the chain, that means fetching it.
+
+The flag values are still not ours to invent - guessing a variant picks a side
+of someone's A/B test for a visitor - so the orchestrator row is narrower
+rather than gone. What a resource can do is answer the contract: a global's
+shape, not a vendor's data.
 
 ## The consent state, and why it is here at all
 
