@@ -193,10 +193,26 @@ function consentRRGtmTag() {
     // that at the earliest - the one this stands in for fires on a consent
     // event, later still - and a page that has not finished parsing has not
     // run the code that sets up what the tag is for.
+    // One task after that event, not in the listener itself. This runs at
+    // document_start, so its listener is registered before any the page adds
+    // and would run before them - and petzl.com assigns the real initGmaps
+    // from one of theirs:
+    //   $(document).ready(function(){ new petzl.controllers.DealerLocator; });
+    // Every listener for that event runs in the one task, so a timeout
+    // scheduled from ours runs after all of them, and what this looks at is
+    // what the page has finished setting up.
+    const soon = ( ) => {
+        try {
+            w.setTimeout(begin, 0);
+        } catch(ex) {
+            begin();
+        }
+    };
+
     try {
         if ( doc.readyState !== 'loading' ) { begin(); }
         else {
-            doc.addEventListener('DOMContentLoaded', begin, { once: true });
+            doc.addEventListener('DOMContentLoaded', soon, { once: true });
         }
     } catch(ex) {
     }

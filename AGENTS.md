@@ -132,6 +132,13 @@ tag's url goes in the filter and only that one script loads.
   document has parsed as well. Field-found, not reviewed-found: the report was
   that allowing the container made the browser ask for the user's location and
   the map open, which is what the real callback does first.
+- **Being first in the `DOMContentLoaded` queue is an artefact, not a
+  position to rely on.** A scriptlet runs at document_start, so its listener is
+  registered before the page's and fires before them - and petzl assigns the
+  real `initGmaps` from `$(document).ready(...)`, which is one of the page's.
+  Every listener for that event runs in the one task, so the fix is a timeout
+  scheduled from ours: it runs after all of them. Looking in the listener
+  itself finds a page that has not set itself up yet.
 - Where a wait can time out, think about what to do with the time-out. Here the
   tag loads anyway, because the page's own code guards on the loader's global
   existing (`if (!window.google) return;`), so a later search still works. Not

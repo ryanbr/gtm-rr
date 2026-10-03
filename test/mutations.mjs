@@ -585,11 +585,17 @@ export default [
         to: '',
     },
     {
+        label: 'tag: looks before the page\'s own ready handlers run',
+        file: TAG,
+        from: '            w.setTimeout(begin, 0);',
+        to: '            begin();',
+    },
+    {
         label: 'tag: injects while the page is still parsing',
         file: TAG,
         from: "        if ( doc.readyState !== 'loading' ) { begin(); }\n" +
             "        else {\n" +
-            "            doc.addEventListener('DOMContentLoaded', begin, " +
+            "            doc.addEventListener('DOMContentLoaded', soon, " +
             "{ once: true });\n        }",
         to: '        begin();',
     },

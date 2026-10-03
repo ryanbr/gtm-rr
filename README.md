@@ -42,7 +42,7 @@ is one setting on **one line**: the name, then every URL you want, separated
 by spaces.
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.1/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.1/dist/ga-optout.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.1/dist/gtm-tag.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.2/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.2/dist/ga-optout.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.2/dist/gtm-tag.js
 ```
 
 Those are the three resources: `googletagmanager_gtm.js`, `ga-optout.js` and
@@ -64,7 +64,7 @@ straight away: the parsed set is cached in a selfie, invalidated on
 reason to pin a tag.
 
 These are pinned to a release, so an install stays where it is until you move
-it. `main` in place of `v1.2.1` follows the branch instead, which is useful for
+it. `main` in place of `v1.2.2` follows the branch instead, which is useful for
 testing a fix and not for leaving in place.
 
 **Use the redirect and the scriptlet together.** `filters/gtm.txt` carries the
@@ -342,6 +342,13 @@ the wait is for a function **with a body**, not merely for the name - a Maps
 loader answered by the empty one draws nothing and reports nothing. On that
 page the sign it worked is the browser asking for your location, which is the
 first thing the real one does.
+
+The look happens one task after `DOMContentLoaded`, not in the listener
+itself: a scriptlet runs at document_start, so its listener is registered
+before any the page adds and would run before them - and petzl assigns the
+real one from `$(document).ready(function(){ new petzl.controllers.DealerLocator; })`,
+which is one of those. Every listener for that event runs in the one task, so
+a timeout scheduled from ours runs after all of them.
 
 It waits up to ten seconds. If the name still holds nothing but a placeholder
 by then, the tag is loaded anyway (`waited-out=`): their own code guards on the

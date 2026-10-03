@@ -128,6 +128,28 @@ describe('gtm-tag', ( ) => {
         assert.deepEqual(injected(w), [ MAPS ]);
     });
 
+    it('looks after the page\'s own ready handlers have run', async ( ) => {
+        // A scriptlet runs at document_start, so its DOMContentLoaded listener
+        // is registered before any the page adds and fires before them.
+        // petzl.com assigns the real initGmaps from a jQuery ready handler -
+        //   $(document).ready(function(){ new petzl.controllers.DealerLocator; });
+        // - so looking in our own listener finds the placeholder. This has to
+        // load the tag without falling back on the 50ms retry.
+        const dom = page();
+        const w = dom.window;
+        lines(w);
+        assert.equal(w.document.readyState, 'loading');
+        w.eval('window.initGmaps = window.initGmaps || function() { };');
+        w.eval(asScriptlet(MAPS, 'initGmaps'));
+        // Registered after the scriptlet's, the way the page's own is.
+        w.eval('document.addEventListener("DOMContentLoaded", function(){' +
+            ' window.initGmaps = function(){ window.mapped = true; }; });');
+        await settle(10);
+        assert.deepEqual(injected(w), [ MAPS ], 'without waiting for a retry');
+        w.initGmaps();
+        assert.equal(w.mapped, true);
+    });
+
     it('takes the placeholder in the end rather than nothing', async ( ) => {
         // A page that never replaces it still gets the loader, because its
         // own code guards on the global the loader creates: petzl's
