@@ -1007,6 +1007,9 @@ function consentRRGtmCore(options) {
         const answer = {
             id, layer, path, hooked, installed, container, registry,
             hiding: ( ) => hiding,
+            // Read when it is asked, not when this is built: the yield
+            // happens on their bind, which is after everything here.
+            live: ( ) => yielded,
             debug,
             level,
             report,

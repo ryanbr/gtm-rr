@@ -157,6 +157,34 @@ describe('googletagmanager_gtm, a wait it has to find itself', ( ) => {
         assert.equal(spinning(w), true, 'their container will fire it');
     });
 
+    it('stops when a real container binds after it installed', async ( ) => {
+        // Their bind is what triggers the yield, and it comes after the
+        // install - so the check has to be at the moment of telling, not
+        // before. Field-seen on hokkaido-np.co.jp with gtm.js allowlisted:
+        // one copy of this reported yielded=live-container while another
+        // told the page its wait was over.
+        const dom = page(SPINNER);
+        const w = dom.window;
+        const out = lines(w);
+        asRedirect(w, WAIT);
+        // Theirs: count itself a subscriber, wrap the push, register the id.
+        w.eval('(function(){var c=window.dataLayer,e=c.push;' +
+            'window.google_tag_manager=window.google_tag_manager||{};' +
+            "var d=window.google_tag_manager['dataLayer']=" +
+            "  window.google_tag_manager['dataLayer']||{};" +
+            'd.subscribers=(d.subscribers||0)+1;' +
+            'c.push=function(){return e.apply(c,[].slice.call(arguments,0))};' +
+            'window.google_tag_manager["GTM-MZB2Z66"]=' +
+            '  window.google_tag_manager["GTM-MZB2Z66"]||{theirs:true}})();');
+        // The next push is where this notices.
+        w.eval('window.dataLayer.push({ event: "gtm.dom" });');
+        await settle(150);
+        assert.ok(said(out, ' yielded=live-container').length !== 0,
+            out.join(' | '));
+        assert.equal(spinning(w), true, 'their container will tell the page');
+        assert.equal(said(out, 'told=').length, 0, out.join(' | '));
+    });
+
     it('fires each wait once', async ( ) => {
         const dom = page('<div id="x"></div>');
         const w = dom.window;

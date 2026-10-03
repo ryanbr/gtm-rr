@@ -211,6 +211,7 @@ function consentRRGtm(a1 = '', a2 = '', a3 = '') {
         }
         // Where a real container answered, nothing went missing: its own tags
         // do whatever writing into the page they do.
+        if ( typeof report.live === 'function' ) { live = report.live; }
         if ( report.installed === 'installed' ) {
             scan();
             watchWaits();
@@ -430,6 +431,7 @@ function consentRRGtm(a1 = '', a2 = '', a3 = '') {
     // container, because that is the work that went missing - a page whose
     // own container loaded is not missing anything.
     const generic = ( ) => {
+        if ( live() ) { return; }
         let found = [];
         try {
             found = doc.querySelectorAll('template');
@@ -595,6 +597,11 @@ function consentRRGtm(a1 = '', a2 = '', a3 = '') {
 
     const heard = new Map();
 
+    // Whether a real container has taken over since. Their bind is what
+    // triggers the yield and it comes later than the install, so this is
+    // asked at the moment of doing something, not before.
+    let live = ( ) => false;
+
     const noteWait = (type, listener) => {
         if ( typeof type !== 'string' || type === '' ) { return; }
         if ( STANDARD.has(type) ) { return; }
@@ -640,6 +647,11 @@ function consentRRGtm(a1 = '', a2 = '', a3 = '') {
     };
 
     const tellWhatWaits = ( ) => {
+        // Their container answers its own page. Field-seen on
+        // hokkaido-np.co.jp with gtm.js allowlisted: one copy of this
+        // reported yielded=live-container while another told the page the
+        // wait was over, which is theirs to do.
+        if ( live() ) { return; }
         let told = 0;
         let held = 0;
         for ( const name of heard.keys() ) {

@@ -159,6 +159,25 @@ const restore = ( ) => {
     for ( const [ file, text ] of originals ) { write(file, text); }
 };
 
+// A run breaks one file at a time and puts it back from a snapshot taken at
+// the start, so anything edited while it runs is overwritten by that restore
+// and the suite in between tests a file nobody meant to test. That has
+// happened twice here, the second time costing an afternoon and some minutes
+// spent chasing tests that looked flaky and were not. The snapshot is the
+// only thing that can tell: if a file is not what this put there, something
+// else wrote it, and every result is suspect.
+const raced = ( ) => {
+    const changed = [];
+    for ( const [ file, text ] of originals ) {
+        try {
+            if ( read(file) !== text ) { changed.push(file); }
+        } catch(ex) {
+            changed.push(file);
+        }
+    }
+    return changed;
+};
+
 for ( const signal of [ 'SIGINT', 'SIGTERM' ] ) {
     process.on(signal, ( ) => {
         restore();
@@ -202,6 +221,15 @@ try {
     }
 } finally {
     restore();
+    const changed = raced();
+    if ( changed.length !== 0 ) {
+        console.log('\n  These are not what this run put back:\n');
+        for ( const file of changed ) { console.log('  ' + file); }
+        console.log('\n  Something else wrote them while it ran - an editor,' +
+            ' or a second run.\n  Every result above is suspect. Run it again' +
+            ' on a tree nobody is touching.');
+        process.exitCode = 1;
+    }
 }
 
 /******************************************************************************/

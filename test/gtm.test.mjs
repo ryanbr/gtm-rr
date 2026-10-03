@@ -807,9 +807,9 @@ describe('googletagmanager_gtm', ( ) => {
         const said = out.join(' | ');
         // A console is pasted into bug reports. What the page passed is the
         // page's data, and a command going nowhere is this resource working.
-        assert.equal(said.includes('someone@example.com'), false);
-        assert.equal(said.includes('T-12345'), false);
-        assert.equal(said.includes(' missing=command.'), false);
+        assert.equal(said.includes('someone@example.com'), false, said);
+        assert.equal(said.includes('T-12345'), false, said);
+        assert.equal(said.includes(' missing=command.'), false, said);
         // The name of the thing it asked for is still said.
         assert.ok(said.includes(' missing=ga.send'), said);
         assert.equal(said.includes(' args='), false);

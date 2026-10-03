@@ -557,6 +557,12 @@ export default [
         to: "    const bundle = bundled.join('');",
     },
     {
+        label: 'waits: told even once a live container has taken over',
+        file: GTM,
+        from: '        if ( live() ) { return; }\n        let told = 0;',
+        to: '        let told = 0;',
+    },
+    {
         label: 'waits: any event a page listens for is fired',
         file: GTM,
         from: '        if ( reNAMEOUT.test(type) ) { return; }',
