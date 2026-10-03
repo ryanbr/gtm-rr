@@ -1023,6 +1023,37 @@ export default [
         to: '            if ( false ) { return false; }',
     },
     {
+        label: 'lp: campaign= is not a name, so it lands where when= goes',
+        file: TAG,
+        from: "        if ( key === 'url' || key === 'needs' || key === 'when' ||\n" +
+            "            key === 'campaign' )",
+        to: "        if ( key === 'url' || key === 'needs' || key === 'when' )",
+    },
+    {
+        label: 'lp: the targeting SDE is never pushed',
+        file: TAG,
+        from: "        if ( campaign !== '' ) {",
+        to: '        if ( false ) {',
+    },
+    {
+        label: 'lp: any campaign value will do',
+        file: TAG,
+        from: '            if ( reCAMPAIGN.test(campaign) ) {',
+        to: '            if ( true ) {',
+    },
+    {
+        label: 'lp: the SDE goes out under the wrong type',
+        file: TAG,
+        from: "                        type: 'mrktInfo',",
+        to: "                        type: 'marketingInfo',",
+    },
+    {
+        label: 'lp: a seeded section is flattened to a string',
+        file: TAG,
+        from: "            section: was('section', ''),",
+        to: "            section: String(was('section', '')),",
+    },
+    {
         label: 'lp: domReady waits for an event already gone',
         file: TAG,
         from: "                if ( doc.readyState === 'complete' ) {\n" +

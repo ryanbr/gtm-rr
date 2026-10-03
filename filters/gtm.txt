@@ -140,9 +140,24 @@ www.hokkaido-np.co.jp##+js(gtm-tag, https://cdn.activity.smart-bdash.com/tag-man
 ! that would is in Fanboy's Social/Chat addon, and where that is on the append
 ! does not load. window._lptStop, LivePerson's own opt-out, is honoured, and a
 ! page where the real snippet already ran is left alone.
+!
+! campaign= is the second half of it, and the half that took a second report.
+! GTM-TS6X5PB has FIVE tags touching lpTag, not one: the bootstrap, and - the
+! one that matters - lpTag.sdes.push({type:"mrktInfo",info:{campaignId:...}}),
+! which is how their account selects a campaign. Without it the bootstrap
+! comes up, every taglet loads, the visitor API is called, and no engagement
+! is served: everything looks healthy and nothing renders.
+!
+! mrktInfo is the only SDE accepted here. The others that container pushes -
+! customerSDE, cartSDE, purchaseSDE - are a visitor's income band, basket and
+! order, and a filter is no place to invent those.
+!
+! A third tag sets lpTag.section from the path. Measured: it makes no
+! difference to this engagement, which is just as well, since a cosmetic
+! filter cannot be scoped to a path.
 ! -----------------------------------------------------------------------------
-www.medibank.com.au##+js(gtm-tag, https://lptag.liveperson.net/tag/tag.js?site=3178090)
-www.medibankoshc.com.au##+js(gtm-tag, https://lptag.liveperson.net/tag/tag.js?site=3178090)
+www.medibank.com.au##+js(gtm-tag, https://lptag.liveperson.net/tag/tag.js?site=3178090, campaign=chat)
+www.medibankoshc.com.au##+js(gtm-tag, https://lptag.liveperson.net/tag/tag.js?site=3178090, campaign=chat)
 
 ! -----------------------------------------------------------------------------
 ! Where a container's job was to write into the page rather than to load

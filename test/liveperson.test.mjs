@@ -236,6 +236,68 @@ describe('gtm-tag, a loader that cannot start from its own url', ( ) => {
         );
     });
 
+    it('pushes the targeting SDE their account selects a campaign by', async ( ) => {
+        // The thing the button actually hung on. Their container's fifth
+        // lpTag tag pushes it; the bootstrap alone does not, and then every
+        // taglet loads and no engagement is served.
+        const w = page().window;
+        const out = lines(w);
+        w.eval(asScriptlet(SRC, 'campaign=chat'));
+        await settle(120);
+        const sdes = w.lpTag.sdes;
+        assert.equal(sdes.length, 1, JSON.stringify(sdes));
+        assert.equal(sdes[0].type, 'mrktInfo');
+        assert.equal(sdes[0].info.campaignId, 'chat');
+        assert.deepEqual(injected(w), [ SRC ]);
+        assert.ok(
+            out.some(l => l.includes('built=lpTag site=' + SITE + ' campaign=chat')),
+            out.join(' | ')
+        );
+    });
+
+    it('adds it to what the page already pushed, rather than over it', async ( ) => {
+        const w = page().window;
+        w.eval('window.lpTag = { sdes: [ { type: "ctmrinfo" } ] };');
+        w.eval(asScriptlet(SRC, 'campaign=chat'));
+        await settle(120);
+        assert.equal(w.lpTag.sdes.length, 2);
+        assert.equal(w.lpTag.sdes[0].type, 'ctmrinfo');
+        assert.equal(w.lpTag.sdes[1].info.campaignId, 'chat');
+    });
+
+    it('refuses a campaign that is not a name, and loads anyway', async ( ) => {
+        // A bootstrap with no campaign still beats no bootstrap, so the
+        // refusal is of the value, not of the tag.
+        const w = page().window;
+        const out = lines(w);
+        w.eval(asScriptlet(SRC, 'campaign=chat; drop table'));
+        await settle(120);
+        assert.equal(w.lpTag.sdes.length, 0, 'nothing invented');
+        assert.deepEqual(injected(w), [ SRC ], 'and their tag still loads');
+        assert.ok(out.some(l => l.includes('refused=campaign')), out.join(' | '));
+    });
+
+    it('pushes nothing for a url that is not theirs', async ( ) => {
+        const w = page().window;
+        w.eval(asScriptlet(OTHER, 'campaign=chat'));
+        await settle(120);
+        assert.equal(w.lpTag, undefined);
+        assert.deepEqual(injected(w), [ OTHER ]);
+    });
+
+    it('keeps a seeded section as the array their container assigns', async ( ) => {
+        // Their third tag assigns an array - ["service","contact-us"] on
+        // /contact-us/ - and a String() around it would hand their framework
+        // "service,contact-us" instead.
+        const w = page().window;
+        w.eval('window.lpTag = { section: [ "service", "contact-us" ] };');
+        w.eval(asScriptlet(SRC));
+        await settle(120);
+        assert.ok(Array.isArray(w.lpTag.section), typeof w.lpTag.section);
+        assert.equal(w.lpTag.section.length, 2);
+        assert.equal(w.lpTag.section[1], 'contact-us');
+    });
+
     it('records both their milestones even when load has gone', async ( ) => {
         // This runs a task after the document parsed, and on a slow page that
         // can be after load as well - a listener registered then never fires,

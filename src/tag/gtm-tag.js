@@ -121,7 +121,9 @@ function consentRRGtmTag(a1 = '', a2 = '', a3 = '', a4 = '', a5 = '') {
         }
         const at = arg.indexOf('=');
         const key = at > 0 ? arg.slice(0, at) : '';
-        if ( key === 'url' || key === 'needs' || key === 'when' ) {
+        if ( key === 'url' || key === 'needs' || key === 'when' ||
+            key === 'campaign' )
+        {
             named[key] = arg.slice(at + 1).trim();
             continue;
         }
@@ -130,6 +132,7 @@ function consentRRGtmTag(a1 = '', a2 = '', a3 = '', a4 = '', a5 = '') {
     const url = named.url !== undefined ? named.url : loose[0];
     const needs = named.needs !== undefined ? named.needs : loose[1];
     const when = named.when !== undefined ? named.when : loose[2];
+    const campaign = named.campaign !== undefined ? named.campaign : '';
 
     const say = what => {
         try {
@@ -347,6 +350,7 @@ function consentRRGtmTag(a1 = '', a2 = '', a3 = '', a4 = '', a5 = '') {
     const LP_PATH = '/tag/tag.js';
     const LP_HOST = 'liveperson.net';
     const reACCOUNT = /^[0-9]{3,12}$/;
+    const reCAMPAIGN = /^[A-Za-z0-9_-]{1,40}$/;
 
     const lpTagUrl = ( ) => {
         try {
@@ -419,7 +423,7 @@ function consentRRGtmTag(a1 = '', a2 = '', a3 = '', a4 = '', a5 = '') {
             wl: was('wl', null),
             scp: was('scp', null),
             site: site,
-            section: String(was('section', '')),
+            section: was('section', ''),
             tagletSection: was('tagletSection', null),
             autoStart: was('autoStart', true) !== false,
             ovr: was('ovr', {}),
@@ -439,6 +443,49 @@ function consentRRGtmTag(a1 = '', a2 = '', a3 = '', a4 = '', a5 = '') {
             identities: wasList('identities'),
             ev: wasList('ev'),
         };
+
+        // The one thing their bootstrap does not carry, and the thing the
+        // button turned out to hang on. GTM-TS6X5PB has five tags touching
+        // lpTag, not one, and the fifth is
+        //
+        //   var isSupported = CheckAbcSupport(), targetChannel = "chat";
+        //   isSupported && (targetChannel = "abc");
+        //   lpTag.sdes = lpTag.sdes || [];
+        //   lpTag.sdes.push({ type: "mrktInfo",
+        //                     info: { campaignId: targetChannel } });
+        //
+        // which is how their account picks a campaign. Measured against the
+        // live page, back to back with the container allowed: with the
+        // bootstrap alone lpTag comes up, every taglet loads and no
+        // engagement is served; with that one SDE pushed, the LPMcontainer
+        // and their message-us-button.svg render exactly as the container
+        // produces them. A third tag sets lpTag.section from the path -
+        // ["service","contact-us"] on /contact-us/ - and that turned out not
+        // to matter: the SDE alone is enough, and section stayed [].
+        //
+        // mrktInfo is the only engagement datum worth synthesising here, and
+        // deliberately the only one accepted. The others their container
+        // pushes - customerSDE, cartSDE, purchaseSDE - are a visitor's
+        // income band, basket and order, and a filter argument is no place
+        // to invent those. This one is a campaign name and nothing else.
+        //
+        // Their abc-or-chat choice is a browser capability test, which this
+        // does not make: a filter names one campaign and an Apple Business
+        // Chat capable browser gets the chat engagement rather than the abc
+        // one. A working button either way.
+        if ( campaign !== '' ) {
+            if ( reCAMPAIGN.test(campaign) ) {
+                try {
+                    tag.sdes.push({
+                        type: 'mrktInfo',
+                        info: { campaignId: campaign },
+                    });
+                } catch(ex) {
+                }
+            } else {
+                say('refused=campaign campaign=' + campaign.slice(0, 24));
+            }
+        }
 
         tag.defer = function(fn, bucket) {
             const into = bucket === 0 ? BEFORE : bucket === 1 ? TRIGGER : LAST;
@@ -582,7 +629,8 @@ function consentRRGtmTag(a1 = '', a2 = '', a3 = '', a4 = '', a5 = '') {
             say('failed=lpTag site=' + site);
             return false;
         }
-        say('built=lpTag site=' + site);
+        say('built=lpTag site=' + site +
+            (campaign !== '' ? ' campaign=' + campaign : ''));
         return true;
     };
 

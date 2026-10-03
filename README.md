@@ -45,7 +45,7 @@ is one setting on **one line**: the name, then every URL you want, separated
 by spaces.
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.11.1/dist/gtm-rr-all.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.12.0/dist/gtm-rr-all.js
 ```
 
 **One URL carries all three.** A resources file holds as many resources as it
@@ -57,7 +57,7 @@ built from the same files and the tests check it holds them unchanged.
 To install only some of them, name those instead - still on the one line:
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.11.1/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.11.1/dist/gtm-tag.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.12.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.12.0/dist/gtm-tag.js
 ```
 
 **One URL per line does not work, and fails quietly.** uBO reads a hidden
@@ -76,7 +76,7 @@ straight away: the parsed set is cached in a selfie, invalidated on
 reason to pin a tag.
 
 These are pinned to a release, so an install stays where it is until you move
-it. `main` in place of `v1.11.1` follows the branch instead, which is useful for
+it. `main` in place of `v1.12.0` follows the branch instead, which is useful for
 testing a fix and not for leaving in place.
 
 **Use the redirect and the scriptlet together.** `filters/gtm.txt` carries the
@@ -404,15 +404,53 @@ functions, a loader for their taglets, and seven arrays those push into.
 So `gtm-tag` builds it, off the url the filter already gives it:
 
 ```
-www.medibank.com.au##+js(gtm-tag, https://lptag.liveperson.net/tag/tag.js?site=3178090)
-www.medibankoshc.com.au##+js(gtm-tag, https://lptag.liveperson.net/tag/tag.js?site=3178090)
+www.medibank.com.au##+js(gtm-tag, https://lptag.liveperson.net/tag/tag.js?site=3178090, campaign=chat)
+www.medibankoshc.com.au##+js(gtm-tag, https://lptag.liveperson.net/tag/tag.js?site=3178090, campaign=chat)
 ```
 
-The account comes out of that url's own `site=`, so there is no extra argument
-and the line is an ordinary `gtm-tag` line. Measured in Chrome against the live
-page with `gtm.js` still replaced: the button is back, `lpTag.site` is 3178090,
-their tag 4.1.18 runs, and the request set is the same one allowing the
-container produces. The exceptions this replaces,
+The account comes out of that url's own `site=`, so it needs no argument of its
+own. The second one does need saying, and finding out why took a report that
+the first version did not work:
+
+**That container has five tags touching `lpTag`, not one.** The bootstrap is
+the first. The fifth is how their account picks a campaign:
+
+```js
+var isSupported = CheckAbcSupport(), targetChannel = "chat";
+isSupported && (targetChannel = "abc");
+lpTag.sdes.push({ type: "mrktInfo", info: { campaignId: targetChannel } });
+```
+
+Without it the bootstrap comes up, `lpTag.site` is right, all 36 taglets load,
+the visitor API is called - and no engagement is served. Everything looks
+healthy and nothing renders, which is the hardest shape of all to diagnose
+from a console. `campaign=` pushes that one SDE.
+
+Measured against the live page, each pair run back to back:
+
+| | `lpTag.section` | LivePerson elements |
+|---|---|---|
+| container allowed (control) | `["service","contact-us"]` | 2 |
+| bootstrap alone | `[]` | **0** |
+| bootstrap + `campaign=chat` | `[]` | 2 |
+
+A third tag sets `lpTag.section` from the path, and it turned out not to
+matter: seeded to match the control exactly, the button still did not render,
+and with the SDE it renders with `section` left empty. Which is the lucky
+answer, because section is per-path and a cosmetic filter cannot be scoped to
+a path.
+
+`mrktInfo` is the only SDE this accepts, and that is deliberate. The others
+their container pushes - `customerSDE`, `cartSDE`, `purchaseSDE` - are a
+visitor's income band, basket and order, and a filter argument is no place to
+invent those. This one is a campaign name and nothing else.
+
+Their `CheckAbcSupport()` picks `abc` over `chat` on an Apple Business Chat
+capable browser. This does not make that test, so a filter names one campaign
+and Safari gets the chat engagement rather than the ABC one - a working button
+either way.
+
+The exceptions this replaces,
 `@@||googletagmanager.com/gtm.js$domain=medibank.com.au` and
 `medibankoshc.com.au`, let that whole container back in - a Facebook pixel
 among the rest.
