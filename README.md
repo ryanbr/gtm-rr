@@ -42,7 +42,7 @@ is one setting on **one line**: the name, then every URL you want, separated
 by spaces.
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.2/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.2/dist/ga-optout.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.2.2/dist/gtm-tag.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.3.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.3.0/dist/ga-optout.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.3.0/dist/gtm-tag.js
 ```
 
 Those are the three resources: `googletagmanager_gtm.js`, `ga-optout.js` and
@@ -64,7 +64,7 @@ straight away: the parsed set is cached in a selfie, invalidated on
 reason to pin a tag.
 
 These are pinned to a release, so an install stays where it is until you move
-it. `main` in place of `v1.2.2` follows the branch instead, which is useful for
+it. `main` in place of `v1.3.0` follows the branch instead, which is useful for
 testing a fix and not for leaving in place.
 
 **Use the redirect and the scriptlet together.** `filters/gtm.txt` carries the
@@ -329,8 +329,20 @@ url in the filter, so the container never runs and none of the rest of it does
 either:
 
 ```
-petzl.com##+js(gtm-tag, https://maps.googleapis.com/maps/api/js?v=3.31&key=<their-key>&callback=initGmaps, initGmaps)
+petzl.com##+js(gtm-tag, https://maps.googleapis.com/maps/api/js?v=3.31&key=<their-key>&callback=initGmaps, initGmaps, PageType=DealerLocator)
 ```
+
+The third argument is **the container's own trigger**, as `Key=substring`
+tested against the page's data layer - the same test GTM makes. Their Maps tag
+is held behind `_cn` on the data layer variable `PageType`, and the page pushes
+`{'PageName':'Web_DealerLocator','PageType':'DealerLocator', ...}`, so
+`PageType=DealerLocator` is that condition. It reads the last write of the key,
+and a dotted `page.type` walks in, as their model does.
+
+This is not decoration. **A scriptlet filter cannot be scoped to a path**, only
+to a domain, so without it the line runs on every page of the site and loads a
+tag meant for one of them everywhere. With it, a page the trigger does not
+match gets nothing at all.
 
 The second argument is a global the tag needs before it arrives: a loader asked
 for with `&callback=initGmaps` throws if it lands first. It is a *name*, and a
@@ -362,8 +374,12 @@ your own filters where you can see what the url is.
 
 `npm run tags -- GTM-XXXXXXX` finds the candidates without a browser: it reads
 the container, lists the scripts its Custom HTML tags inject, drops the ones
-that are plainly ad or analytics infrastructure, and prints a ready-made line
-for each of the rest. Their own `"metadata"` field often names the purpose -
+that are plainly ad or analytics infrastructure, resolves each remaining tag's
+trigger through the container's rules, predicates and macros, and prints the
+ready-made line - callback, condition and all. Where the trigger is not a
+single data layer test it prints what the container checks instead, for you to
+read. Watch for a script that appears twice behind different triggers: petzl's
+Maps tag is in there for their sandbox hosts as well as live. Their own `"metadata"` field often names the purpose -
 both entries above are tagged `["map"]`.
 
 Most containers need none of this. Of three real ones: `GTM-MWKBJV` injects

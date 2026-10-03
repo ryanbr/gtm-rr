@@ -132,6 +132,19 @@ tag's url goes in the filter and only that one script loads.
   document has parsed as well. Field-found, not reviewed-found: the report was
   that allowing the container made the browser ask for the user's location and
   the map open, which is what the real callback does first.
+- **A scriptlet filter cannot be scoped to a path, so the trigger has to come
+  from somewhere.** A container holds its tags behind conditions, and petzl's
+  Maps tag is behind `_cn` on the data layer variable `PageType` - which the
+  page pushes itself, so the test is reproducible without the container.
+  That is `gtm-tag`'s third argument. Without it a tag meant for one page
+  loads on every page of the site.
+- **The same script can be in a container twice, behind different triggers.**
+  petzl's Maps tag is there for their sandbox hosts as well as live, and
+  `tools/tags.mjs` deduplicated by url, kept the first and reported the
+  sandbox trigger. It merges them now. A container's `rules` reference tags by
+  **index into `tags`**, not by `tag_id`, and its config is a JavaScript
+  object literal - the `\x3d` escapes make `JSON.parse` throw - so the arrays
+  are split by a string-aware scanner rather than parsed.
 - **Being first in the `DOMContentLoaded` queue is an artefact, not a
   position to rely on.** A scriptlet runs at document_start, so its listener is
   registered before the page's and fires before them - and petzl assigns the

@@ -55,16 +55,114 @@ const fetchContainer = async id => {
     return await response.text();
 };
 
+// Their config is a JavaScript object literal, not JSON - the strings carry
+// \x3d escapes that JSON.parse refuses - so the arrays are split by hand.
+// String-aware, because a vtp_html template is full of braces and commas.
+const splitArray = (text, key) => {
+    const at = text.indexOf('"' + key + '":[');
+    if ( at === -1 ) { return []; }
+    const start = text.indexOf('[', at);
+    const out = [];
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    let cur = start + 1;
+    for ( let i = start; i < text.length; i++ ) {
+        const c = text[i];
+        if ( inString ) {
+            if ( escaped ) { escaped = false; }
+            else if ( c === '\\' ) { escaped = true; }
+            else if ( c === '"' ) { inString = false; }
+            continue;
+        }
+        if ( c === '"' ) { inString = true; continue; }
+        if ( c === '[' || c === '{' ) { depth += 1; continue; }
+        if ( c === ']' || c === '}' ) {
+            depth -= 1;
+            if ( depth === 0 ) { out.push(text.slice(cur, i)); return out; }
+            continue;
+        }
+        if ( c === ',' && depth === 1 ) {
+            out.push(text.slice(cur, i));
+            cur = i + 1;
+        }
+    }
+    return out;
+};
+
+// What a container tests before firing a tag. The same condition gtm-tag
+// takes as its third argument: a data layer variable and a substring.
+//   {"function":"_cn","arg0":["macro",24],"arg1":"DealerLocator"}
+//   macro 24 = {"function":"__v","vtp_name":"PageType"}
+// so the tag is held behind PageType=DealerLocator, and a filter without
+// that condition loads the tag on every page of the site, because a
+// scriptlet filter cannot be scoped to a path.
+const triggersFrom = text => {
+    const macros = splitArray(text, 'macros').map(raw => {
+        const kind = /"function":"(__[a-z]+)"/.exec(raw);
+        const name = /"vtp_name":"((?:[^"\\]|\\.)*)"/.exec(raw);
+        return {
+            kind: kind !== null ? kind[1] : '',
+            name: name !== null ? unescape(name[1]) : '',
+        };
+    });
+    const predicates = splitArray(text, 'predicates').map(raw => {
+        const fn = /"function":"(_[a-z]{2})"/.exec(raw);
+        const macro = /"arg0":\["macro",(\d+)\]/.exec(raw);
+        const value = /"arg1":"((?:[^"\\]|\\.)*)"/.exec(raw);
+        return {
+            fn: fn !== null ? fn[1] : '',
+            macro: macro !== null ? Number(macro[1]) : -1,
+            value: value !== null ? unescape(value[1]) : '',
+        };
+    });
+    // Rules are plain numbers and short words, so these do parse.
+    const rules = [];
+    for ( const raw of splitArray(text, 'rules') ) {
+        try {
+            rules.push(JSON.parse(raw));
+        } catch(ex) {
+        }
+    }
+    // tag index -> the conditions of every rule that adds it
+    const byTag = new Map();
+    for ( const rule of rules ) {
+        const ifs = [];
+        const adds = [];
+        for ( const clause of rule ) {
+            if ( Array.isArray(clause) === false ) { continue; }
+            const [ what, ...rest ] = clause;
+            if ( what === 'if' ) { ifs.push(...rest); }
+            else if ( what === 'add' ) { adds.push(...rest); }
+        }
+        for ( const index of adds ) {
+            const had = byTag.get(index) || [];
+            for ( const i of ifs ) {
+                const p = predicates[i];
+                if ( p === undefined ) { continue; }
+                const m = macros[p.macro];
+                if ( m === undefined ) { continue; }
+                had.push({ ...p, variable: m.kind === '__v' ? m.name : '' });
+            }
+            byTag.set(index, had);
+        }
+    }
+    return byTag;
+};
+
 // Every __html tag, with what it would inject and what the container says it
 // is for. Their "metadata" often names the purpose - both the OneTrust and
 // the Maps entry in petzl's container are tagged ["map"].
 const tagsFrom = text => {
     const found = [];
-    const re = /\{"function":"__html"[\s\S]{0,8000}?"vtp_html":"((?:[^"\\]|\\.)*)"/g;
-    let match = re.exec(text);
-    while ( match !== null ) {
-        const entry = match[0];
-        const html = unescape(match[1]);
+    const triggers = triggersFrom(text);
+    const entries = splitArray(text, 'tags');
+    for ( let index = 0; index < entries.length; index++ ) {
+        const entry = entries[index];
+        if ( entry.includes('"function":"__html"') === false ) { continue; }
+        const raw = /"vtp_html":"((?:[^"\\]|\\.)*)"/.exec(entry);
+        if ( raw === null ) { continue; }
+        const html = unescape(raw[1]);
         const urls = [];
         const src = /src\s*=\s*\\?["']([^"'\\]+)/g;
         let one = src.exec(html);
@@ -79,14 +177,18 @@ const tagsFrom = text => {
         // label every script with the first one it found.
         const head = entry.slice(0, entry.indexOf('"vtp_html"'));
         const metadata = /"metadata":\[([^\]]*)\][^{]*$/.exec(head);
+        // Only a data layer variable tested for a substring or an exact
+        // value: that is what gtm-tag can be given. Anything else is for a
+        // person to read.
+        const conditions = triggers.get(index) || [];
         for ( const url of urls ) {
             found.push({
                 url,
                 callback: callback !== null ? callback[1] : '',
                 metadata: metadata !== null ? metadata[1] : '',
+                conditions,
             });
         }
-        match = re.exec(text);
     }
     return found;
 };
@@ -125,16 +227,39 @@ for ( const id of ids ) {
             ' holds that a page needs');
         continue;
     }
-    const seen = new Set();
-    const rest = [];
+    // The same script can be in a container more than once, behind different
+    // triggers: petzl's Maps tag is there twice, one copy for their sandbox
+    // hosts and one, the live one, behind PageType. Keeping the first and
+    // dropping the rest reports the wrong trigger, so they are merged.
+    const byUrl = new Map();
     for ( const tag of tags ) {
-        if ( seen.has(tag.url) ) { continue; }
-        seen.add(tag.url);
+        const had = byUrl.get(tag.url);
+        if ( had === undefined ) {
+            byUrl.set(tag.url, { ...tag, conditions: [ ...tag.conditions ] });
+            continue;
+        }
+        had.conditions.push(...tag.conditions);
+        if ( had.callback === '' ) { had.callback = tag.callback; }
+        if ( had.metadata === '' ) { had.metadata = tag.metadata; }
+    }
+    const rest = [];
+    for ( const tag of byUrl.values() ) {
         if ( looksLikeTracker(tag.url) ) { continue; }
+        // Only a data layer variable tested for a substring or an exact
+        // value: that is what gtm-tag can be given. A host or an event test
+        // is for a person to read.
+        const usable = new Set();
+        for ( const c of tag.conditions ) {
+            if ( c.variable === '' ) { continue; }
+            if ( c.fn !== '_cn' && c.fn !== '_eq' ) { continue; }
+            usable.add(c.variable + '=' + c.value);
+        }
+        tag.when = usable.size === 1 ? [ ...usable ][0] : '';
+        tag.others = [ ...usable ];
         rest.push(tag);
     }
-    const trackers = seen.size - rest.length;
-    console.log(`  ${seen.size} scripts, of which ${trackers} are plainly ad` +
+    const trackers = byUrl.size - rest.length;
+    console.log(`  ${byUrl.size} scripts, of which ${trackers} are plainly ad` +
         ` or analytics infrastructure and are not listed.`);
     if ( rest.length === 0 ) {
         console.log('  Nothing else - so this container holds nothing a page' +
@@ -142,10 +267,24 @@ for ( const id of ids ) {
         continue;
     }
     console.log('  The rest, which is where page functionality would be:');
-    for ( const { url, callback, metadata } of rest ) {
+    for ( const { url, callback, metadata, when, conditions } of rest ) {
+
         console.log(`    ${url}` +
             `${metadata !== '' ? '   metadata=' + metadata : ''}`);
         console.log(`      <site>##+js(gtm-tag, ${url}` +
-            `${callback !== '' ? ', ' + callback : ''})`);
+            `${callback !== '' || when !== '' ? ', ' + callback : ''}` +
+            `${when !== '' ? ', ' + when : ''})`);
+        if ( when === '' && conditions.length !== 0 ) {
+            const seenSaid = new Set();
+            console.log('      no single data layer condition to give it -' +
+                ' what the container tests:');
+            for ( const c of conditions ) {
+                const said = `        ${c.fn} ${c.variable !== '' ?
+                    c.variable : 'macro ' + c.macro} ${c.value}`;
+                if ( seenSaid.has(said) ) { continue; }
+                seenSaid.add(said);
+                console.log(said);
+            }
+        }
     }
 }

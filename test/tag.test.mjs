@@ -216,6 +216,97 @@ describe('gtm-tag', ( ) => {
         assert.deepEqual(injected(w), [ MAPS ]);
     });
 
+    // petzl.com's own push, which is what their container's trigger reads:
+    //   {'PageName':'Web_DealerLocator','PageType':'DealerLocator', ...}
+    // ... followed by the pushes any page makes after it, which do not carry
+    // the key: a container pushes gtm.js, gtm.dom and gtm.load of its own.
+    const PUSH = "window.dataLayer = window.dataLayer || []; " +
+        "window.dataLayer.push({'PageName':'Web_DealerLocator'," +
+        "'PageType':'DealerLocator','Template':'Desktop'}); " +
+        "window.dataLayer.push({'event':'gtm.dom'}); " +
+        "window.dataLayer.push({'event':'gtm.load'});";
+
+    it('loads only where the container\'s trigger matches', async ( ) => {
+        const dom = page();
+        const w = dom.window;
+        const out = lines(w);
+        w.eval(PUSH);
+        w.eval(asScriptlet(MAPS, '', 'PageType=DealerLocator'));
+        await settle(120);
+        assert.deepEqual(injected(w), [ MAPS ]);
+        assert.ok(out[0].includes(' when=PageType=DealerLocator'), out[0]);
+    });
+
+    it('stays off a page the trigger excludes', async ( ) => {
+        // The reason this exists: a scriptlet filter cannot be scoped to a
+        // path, so without the trigger this would load the tag on every page
+        // of the site.
+        const dom = page();
+        const w = dom.window;
+        try {
+            const out = lines(w);
+            const real = w.setTimeout;
+            w.setTimeout = (fn, ms) => real.call(w, fn, ms === 50 ? 1 : ms);
+            w.eval("window.dataLayer = [{'PageType':'Home'}];");
+            w.eval(asScriptlet(MAPS, '', 'PageType=DealerLocator'));
+            await settle(500);
+            assert.deepEqual(injected(w), []);
+            assert.ok(out.some(l => l.includes(' gave-up=PageType=DealerLocator')),
+                out.join(' | '));
+        } finally {
+            w.close();
+        }
+    });
+
+    it('waits for the push the trigger reads', async ( ) => {
+        const dom = page();
+        const w = dom.window;
+        lines(w);
+        w.eval(asScriptlet(MAPS, '', 'PageType=DealerLocator'));
+        await settle(120);
+        assert.deepEqual(injected(w), [], 'no data layer yet');
+        w.eval(PUSH);
+        await settle(120);
+        assert.deepEqual(injected(w), [ MAPS ]);
+    });
+
+    it('reads the last write, and a dotted key', async ( ) => {
+        const dom = page();
+        const w = dom.window;
+        lines(w);
+        w.eval("window.dataLayer = [{'page':{'type':'Home'}}," +
+            "{'page':{'type':'DealerLocator'}},{'event':'gtm.load'}];");
+        w.eval(asScriptlet(MAPS, '', 'page.type=DealerLocator'));
+        await settle(120);
+        assert.deepEqual(injected(w), [ MAPS ]);
+    });
+
+    it('wants both the trigger and the callback', async ( ) => {
+        const dom = page();
+        const w = dom.window;
+        lines(w);
+        w.eval('window.initGmaps = window.initGmaps || function() { };');
+        w.eval(asScriptlet(MAPS, 'initGmaps', 'PageType=DealerLocator'));
+        await settle(120);
+        assert.deepEqual(injected(w), [], 'trigger unmatched, callback empty');
+        w.eval(PUSH);
+        await settle(120);
+        assert.deepEqual(injected(w), [], 'trigger matched, callback still empty');
+        w.eval('window.initGmaps = function(){ window.mapped = true; };');
+        await settle(120);
+        assert.deepEqual(injected(w), [ MAPS ]);
+    });
+
+    it('refuses a condition that is not Key=value', ( ) => {
+        const dom = page();
+        const w = dom.window;
+        const out = lines(w);
+        w.eval(asScriptlet(MAPS, '', 'PageType'));
+        assert.deepEqual(injected(w), []);
+        assert.ok(out.some(l => l.includes(' refused=condition')),
+            out.join(' | '));
+    });
+
     it('refuses anything but https', ( ) => {
         for ( const bad of [
             'http://maps.googleapis.com/maps/api/js',

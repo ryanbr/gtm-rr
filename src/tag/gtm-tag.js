@@ -38,6 +38,20 @@
 
       example.com##+js(gtm-tag, https://maps.googleapis.com/maps/api/js?key=K&callback=initGmaps, initGmaps)
 
+    A third argument is the container's own trigger, as Key=substring tested
+    against the page's data layer. petzl.com pushes
+
+      {'PageName':'Web_DealerLocator','PageType':'DealerLocator', ...}
+
+    and the tag that loads their map is held behind a _cn on PageType, so
+
+      petzl.com##+js(gtm-tag, https://maps.googleapis.com/..., initGmaps, PageType=DealerLocator)
+
+    is the same test the container makes. It matters because a scriptlet
+    filter cannot be scoped to a path: without it this runs on every page of
+    a site, and a tag meant for one page would load on all of them.
+    tools/tags.mjs reads the trigger out of a container and writes the line.
+
     Only https is accepted, and only as a scriptlet: used as a redirect the
     placeholders are never filled in, and this does nothing at all.
 
@@ -60,8 +74,10 @@ function consentRRGtmTag() {
     // was used without arguments - or as a redirect, which it is not for.
     const url = '{{1}}';
     const needs = '{{2}}';
+    const when = '{{3}}';
 
     const unfilled = value => /^\{\{\d+\}\}$/.test(value);
+    const given = value => unfilled(value) === false && value !== '';
 
     const say = what => {
         try {
@@ -71,6 +87,66 @@ function consentRRGtmTag() {
     };
 
     if ( unfilled(url) || url === '' ) { return; }
+
+    // A third argument is the trigger: Key=substring, tested against the
+    // page's data layer, which is where a container reads a condition like
+    // this from too. petzl.com pushes
+    //   {'PageName':'Web_DealerLocator','PageType':'DealerLocator', ...}
+    // and the tag that loads their map is held behind a _cn on PageType, so
+    //   PageType=DealerLocator
+    // is that same test. It matters because a scriptlet filter cannot be
+    // scoped to a path: without it this runs on every page of a site, and a
+    // tag meant for one page would load on all of them.
+    let key = '';
+    let wanted_in = '';
+    if ( given(when) ) {
+        const at = when.indexOf('=');
+        if ( at < 1 ) {
+            say('refused=condition when=' + when);
+            return;
+        }
+        key = when.slice(0, at).trim();
+        wanted_in = when.slice(at + 1).trim();
+    }
+
+    // Last write wins, as their model's get does, and a dotted key walks in
+    // as theirs does: a.b reads b of a.
+    const layerValue = ( ) => {
+        try {
+            const layer = w.dataLayer;
+            if ( Array.isArray(layer) === false ) { return undefined; }
+            const parts = key.split('.');
+            let found;
+            for ( const item of layer ) {
+                let node = item;
+                let ok = true;
+                for ( const part of parts ) {
+                    if ( node === null ) { ok = false; break; }
+                    if ( typeof node !== 'object' ) { ok = false; break; }
+                    if ( Object.prototype.hasOwnProperty.call(node, part) === false ) {
+                        ok = false;
+                        break;
+                    }
+                    node = node[part];
+                }
+                if ( ok ) { found = node; }
+            }
+            return found;
+        } catch(ex) {
+        }
+        return undefined;
+    };
+
+    const matched = ( ) => {
+        if ( given(when) === false ) { return true; }
+        const value = layerValue();
+        if ( value === undefined ) { return false; }
+        try {
+            return String(value).indexOf(wanted_in) !== -1;
+        } catch(ex) {
+        }
+        return false;
+    };
 
     // https only: a tag worth loading is served over it, and a filter
     // argument is not a place to accept anything else.
@@ -101,16 +177,17 @@ function consentRRGtmTag() {
             if ( where === null ) { return false; }
             where.appendChild(script);
             say('injected=' + wanted.href +
-                (unfilled(needs) || needs === '' ? '' : ' waited=' + needs));
+                (given(needs) ? ' waited=' + needs : '') +
+                (given(when) ? ' when=' + when : ''));
             return true;
         } catch(ex) {
         }
         return false;
     };
 
-    // No name to wait for: the tag stands alone, so it goes in as soon as
-    // there is a document to put it in.
-    if ( unfilled(needs) || needs === '' ) {
+    // Nothing to wait for and nothing to test: the tag stands alone, so it
+    // goes in as soon as there is a document to put it in.
+    if ( given(needs) === false && given(when) === false ) {
         try {
             if ( doc.head !== null ) { inject(); }
             else {
@@ -144,6 +221,8 @@ function consentRRGtmTag() {
     };
 
     const ready = ( ) => {
+        if ( matched() === false ) { return false; }
+        if ( given(needs) === false ) { return true; }
         try {
             const fn = w[needs];
             if ( typeof fn !== 'function' ) { return false; }
@@ -167,7 +246,14 @@ function consentRRGtmTag() {
                 // onSearchDealer opens with if (!window.google) return; - so
                 // a search the page makes later works even when the callback
                 // was spent on an empty function.
-                if ( typeof w[needs] === 'function' ) {
+                // The trigger is different from the callback: a page it
+                // does not match is a page the tag was never meant for, so
+                // there is nothing to fall back to.
+                if ( matched() === false ) {
+                    say('gave-up=' + when + ' after=' + UNTIL + 'ms');
+                    return;
+                }
+                if ( given(needs) && typeof w[needs] === 'function' ) {
                     say('waited-out=' + needs + ' after=' + UNTIL + 'ms');
                     inject();
                     return;

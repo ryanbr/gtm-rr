@@ -73,7 +73,12 @@
 ! carries that site's own API key, which belongs in your own filters rather
 ! than in a list:
 !
-! petzl.com##+js(gtm-tag, https://maps.googleapis.com/maps/api/js?v=3.31&key=<their-key>&callback=initGmaps, initGmaps)
+! petzl.com##+js(gtm-tag, https://maps.googleapis.com/maps/api/js?v=3.31&key=<their-key>&callback=initGmaps, initGmaps, PageType=DealerLocator)
+!
+! The third argument is the container's own trigger, Key=substring against
+! the page's data layer: petzl pushes PageType=DealerLocator and their Maps
+! tag is held behind exactly that test. A scriptlet filter cannot be scoped to
+! a path, so without it the line runs on every page of the site.
 !
 ! That second argument is a name, and a name can hold a placeholder: petzl's
 ! head defines an empty initGmaps so their other pages do not throw, and the

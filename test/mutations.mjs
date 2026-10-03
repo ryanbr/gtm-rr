@@ -570,6 +570,37 @@ export default [
         to: '        inject();',
     },
     {
+        label: 'tag: the trigger is not tested',
+        file: TAG,
+        from: '        if ( given(when) === false ) { return true; }\n' +
+            '        const value = layerValue();',
+        to: '        if ( true ) { return true; }\n' +
+            '        const value = layerValue();',
+    },
+    {
+        label: 'tag: an unmatched trigger is given the benefit of the doubt',
+        file: TAG,
+        from: "                if ( matched() === false ) {\n" +
+            "                    say('gave-up=' + when + ' after=' + UNTIL + " +
+            "'ms');\n                    return;\n                }",
+        to: '',
+    },
+    {
+        label: 'tag: the first write of a data layer key wins',
+        file: TAG,
+        from: '                if ( ok ) { found = node; }',
+        to: '                if ( ok && found === undefined ) { found = node; }',
+    },
+    {
+        label: 'tag: any key holding the value matches',
+        file: TAG,
+        from: '                    if ( Object.prototype.hasOwnProperty.call(node, part) === false ) {\n' +
+            '                        ok = false;\n' +
+            '                        break;\n' +
+            '                    }',
+        to: '',
+    },
+    {
         label: 'tag: a placeholder counts as the real thing',
         file: TAG,
         from: '            return placeholder(fn) === false;',
@@ -578,7 +609,8 @@ export default [
     {
         label: 'tag: a page that only ever has a placeholder gets nothing',
         file: TAG,
-        from: "                if ( typeof w[needs] === 'function' ) {\n" +
+        from: "                if ( given(needs) && typeof w[needs] === " +
+            "'function' ) {\n" +
             "                    say('waited-out=' + needs + ' after=' + " +
             "UNTIL + 'ms');\n                    inject();\n" +
             "                    return;\n                }",
