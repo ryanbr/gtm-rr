@@ -60,6 +60,54 @@ jobs:
       # README and never tagged, and uBO skips a URL that 404s without a word,
       # so the resource was simply absent. Asked of the API rather than the raw
       # host, which caches a 404 for minutes after the tag lands.
+      - name: the pinned release serves the resources this commit builds
+        # A tag that exists is not a tag that is current. v1.10.0 resolved
+        # fine while it served gtm-tag 1.3.0 and main had 1.4.0, so the
+        # documented install silently delivered a resource three commits old
+        # and a filter written for the new one did nothing. Resolving was
+        # never the question - being the same code was.
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          ref=$(grep -ohE 'gtm-rr/v[0-9]+\.[0-9]+\.[0-9]+/' README.md \
+              | head -1 | sed 's#gtm-rr/##; s#/##')
+          echo "pinned at $ref"
+          fail=0
+          for f in dist/*.js; do
+            name=$(basename "$f")
+            if [ "$name" = gtm-rr-all.js ]; then continue; fi
+            here=$(grep -m1 -oE "VERSION = '[0-9.]+'" "$f" || echo none)
+            there=none
+            for attempt in 1 2 3 4 5 6; do
+              body=$(gh api \
+                "repos/${{ github.repository }}/contents/dist/$name?ref=$ref" \
+                --jq .content 2>/dev/null | tr -d '\n' | base64 -d 2>/dev/null \
+                || true)
+              if [ -n "$body" ]; then
+                there=$(printf '%s' "$body" \
+                  | grep -m1 -oE "VERSION = '[0-9.]+'" || echo none)
+                break
+              fi
+              sleep 10
+            done
+            if [ "$here" = "$there" ]; then
+              echo "ok   $name $here"
+            else
+              echo "STALE $name: $ref serves $there, this commit builds $here"
+              fail=1
+            fi
+          done
+          if [ "$fail" != 0 ]; then
+            echo
+            echo "The install URL in README.md points at a release that does"
+            echo "not carry these resources. Bump the version, update the"
+            echo "README, and tag it - a resource bump nobody can fetch is a"
+            echo "resource bump that did not happen."
+            exit 1
+          fi
+
       - name: pinned install URLs resolve
         if: github.event_name != 'pull_request'
         env:
