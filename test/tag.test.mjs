@@ -359,6 +359,59 @@ describe('gtm-tag', ( ) => {
         assert.equal(w.document.write, before, 'and given back after');
     });
 
+    // OneTrust's loader carries its tenant on the element, and so do the
+    // tags petzl.com and globalblue.com gate their content on.
+    const OT = 'https://cdn.cookielaw.org/scripttemplates/otSDKStub.js';
+    const TENANT = 'bb3af1ef-b16c-41df-8541-c0ffeec0ffee';
+
+    it('puts an attribute a filter asks for on the element', ( ) => {
+        const dom = page();
+        const w = dom.window;
+        const out = lines(w);
+        w.eval(asScriptlet(OT, 'attr:data-domain-script=' + TENANT));
+        const script = w.document.querySelector('script[src="' + OT + '"]');
+        assert.notEqual(script, null);
+        assert.equal(script.getAttribute('data-domain-script'), TENANT);
+        // On the element, not on the url.
+        assert.equal(script.src, OT);
+        assert.ok(out[0].includes(' with=data-domain-script'), out[0]);
+    });
+
+    it('takes more than one attribute', ( ) => {
+        const dom = page();
+        const w = dom.window;
+        lines(w);
+        w.eval(asScriptlet(OT,
+            'attr:data-domain-script=' + TENANT,
+            'attr:data-document-language=true',
+            'attr:charset=UTF-8'));
+        const script = w.document.querySelector('script[src="' + OT + '"]');
+        assert.equal(script.getAttribute('data-domain-script'), TENANT);
+        assert.equal(script.getAttribute('data-document-language'), 'true');
+        assert.equal(script.getAttribute('charset'), 'UTF-8');
+    });
+
+    it('takes its arguments named, in any order', async ( ) => {
+        const dom = page();
+        const w = dom.window;
+        lines(w);
+        w.eval("window.dataLayer = [{ PageType: 'Shop' }];" +
+            'window.initGmaps = function(){ window.mapped = true; };');
+        w.eval(asScriptlet('when=PageType=Shop', 'url=' + MAPS,
+            'needs=initGmaps'));
+        await settle(120);
+        assert.deepEqual(injected(w), [ MAPS ]);
+    });
+
+    it('ignores an attr: with nothing to set', ( ) => {
+        const dom = page();
+        const w = dom.window;
+        const out = lines(w);
+        w.eval(asScriptlet(MAPS, 'attr:', 'attr:no-equals'));
+        assert.deepEqual(injected(w), [ MAPS ]);
+        assert.equal(out[0].includes(' with='), false, out[0]);
+    });
+
     it('loads the tag once, however often it runs', ( ) => {
         const dom = page();
         const w = dom.window;

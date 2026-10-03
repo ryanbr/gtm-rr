@@ -734,6 +734,18 @@ export default [
         to: '                const count = 0;',
     },
     {
+        label: 'tag: an attribute a filter asked for is not set',
+        file: TAG,
+        from: '                    script.setAttribute(pair[0], pair[1]);',
+        to: '',
+    },
+    {
+        label: 'tag: an attr: with no value is set anyway',
+        file: TAG,
+        from: '            if ( at > 5 ) {',
+        to: '            if ( at > -2 ) {',
+    },
+    {
         label: 'tag: no url at all is loaded as a url',
         file: TAG,
         from: '    if ( given(url) === false ) { return; }',

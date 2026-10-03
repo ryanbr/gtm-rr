@@ -80,6 +80,14 @@
 ! tag is held behind exactly that test. A scriptlet filter cannot be scoped to
 ! a path, so without it the line runs on every page of the site.
 !
+! A tag that needs an attribute - a consent manager carrying its tenant, say -
+! gets one with attr:name=value, as many as needed, and they go on the element
+! rather than the url:
+!
+!   example.com##+js(gtm-tag, https://host/otSDKStub.js, attr:data-domain-script=<id>)
+!
+! The arguments can be named in any order too: url=, needs=, when=.
+!
 ! That second argument is a name, and a name can hold a placeholder: petzl's
 ! head defines an empty initGmaps so their other pages do not throw, and the
 ! real one is assigned inside their map controller when the page constructs

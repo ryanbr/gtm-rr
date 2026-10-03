@@ -45,7 +45,7 @@ is one setting on **one line**: the name, then every URL you want, separated
 by spaces.
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.8.0/dist/gtm-rr-all.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.9.0/dist/gtm-rr-all.js
 ```
 
 **One URL carries all three.** A resources file holds as many resources as it
@@ -57,7 +57,7 @@ built from the same files and the tests check it holds them unchanged.
 To install only some of them, name those instead - still on the one line:
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.8.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.8.0/dist/gtm-tag.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.9.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.9.0/dist/gtm-tag.js
 ```
 
 **One URL per line does not work, and fails quietly.** uBO reads a hidden
@@ -76,7 +76,7 @@ straight away: the parsed set is cached in a selfie, invalidated on
 reason to pin a tag.
 
 These are pinned to a release, so an install stays where it is until you move
-it. `main` in place of `v1.8.0` follows the branch instead, which is useful for
+it. `main` in place of `v1.9.0` follows the branch instead, which is useful for
 testing a fix and not for leaving in place.
 
 **Use the redirect and the scriptlet together.** `filters/gtm.txt` carries the
@@ -358,6 +358,27 @@ This is not decoration. **A scriptlet filter cannot be scoped to a path**, only
 to a domain, so without it the line runs on every page of the site and loads a
 tag meant for one of them everywhere. With it, a page the trigger does not
 match gets nothing at all.
+
+**A tag can need more than a url.** OneTrust's loader carries its tenant on
+the element, and a container's consent manager is the tag a site's content is
+most often gated on:
+
+```html
+<script src="https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"
+        data-domain-script="bb3af1ef-…">
+```
+
+So any attribute can be asked for, as many as needed, and they go on the
+element rather than the url - a tenant id in a query string is not what a
+loader reads:
+
+```
+example.com##+js(gtm-tag, https://cdn.cookielaw.org/scripttemplates/otSDKStub.js, attr:data-domain-script=bb3af1ef-…)
+```
+
+Nothing here is vendor-specific: `attr:` takes any name. The arguments can
+also be named in any order - `url=`, `needs=`, `when=` - since position is a
+poor way to ask for the fourth thing.
 
 The second argument is a global the tag needs before it arrives: a loader asked
 for with `&callback=initGmaps` throws if it lands first. It is a *name*, and a

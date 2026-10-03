@@ -70,7 +70,7 @@
 
 */
 
-function consentRRGtmTag(url = '', needs = '', when = '') {
+function consentRRGtmTag(a1 = '', a2 = '', a3 = '', a4 = '', a5 = '') {
     const w = window;
     const doc = w.document;
     const VERSION = '@@VERSION@@';
@@ -81,6 +81,55 @@ function consentRRGtmTag(url = '', needs = '', when = '') {
     const MARKER = 'consentRRGtmTagLoaded';
 
     const given = value => typeof value === 'string' && value !== '';
+
+    // The filter's arguments, named or in the order they were first
+    // documented. A src alone does not reproduce every tag a container
+    // holds: OneTrust's loader needs its tenant, and carries it on the
+    // element -
+    //
+    //   <script src="https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"
+    //           data-domain-script="bb3af1ef-...">
+    //
+    // - so without a way to set an attribute this could not reproduce the
+    // tag a site's content is most often gated on. petzl.com and
+    // globalblue.com both hold their consent manager that way.
+    //
+    //   example.com##+js(gtm-tag, https://host/thing.js)
+    //   example.com##+js(gtm-tag, https://host/thing.js, initGmaps)
+    //   example.com##+js(gtm-tag, https://host/x.js, attr:data-domain-script=abc)
+    //   example.com##+js(gtm-tag, https://host/x.js, needs=jQuery, when=PageType=Shop)
+    //
+    // A url or a callback name can hold an '=' of its own, so only these
+    // three keys and the attr: prefix count as named; anything else falls
+    // through to the position it was given in. An empty argument needs no
+    // guard of its own: these are assigned by index, so an empty one lands
+    // where it was and moves nothing along. The resource that collapsed them
+    // instead put 'self' where a selector goes.
+    const named = {};
+    const attrs = [];
+    const loose = [ '', '', '' ];
+    const args = [ a1, a2, a3, a4, a5 ];
+    for ( let i = 0; i < args.length; i += 1 ) {
+        const arg = args[i];
+        if ( typeof arg !== 'string' ) { continue; }
+        if ( arg.startsWith('attr:') ) {
+            const at = arg.indexOf('=');
+            if ( at > 5 ) {
+                attrs.push([ arg.slice(5, at).trim(), arg.slice(at + 1) ]);
+            }
+            continue;
+        }
+        const at = arg.indexOf('=');
+        const key = at > 0 ? arg.slice(0, at) : '';
+        if ( key === 'url' || key === 'needs' || key === 'when' ) {
+            named[key] = arg.slice(at + 1).trim();
+            continue;
+        }
+        if ( i < 3 ) { loose[i] = arg; }
+    }
+    const url = named.url !== undefined ? named.url : loose[0];
+    const needs = named.needs !== undefined ? named.needs : loose[1];
+    const when = named.when !== undefined ? named.when : loose[2];
 
     const say = what => {
         try {
@@ -271,6 +320,14 @@ function consentRRGtmTag(url = '', needs = '', when = '') {
             const script = doc.createElement('script');
             script.async = true;
             script.src = wanted.href;
+            // On the element, never on the url: a tenant id in a query
+            // string is not what their loader reads.
+            for ( const pair of attrs ) {
+                try {
+                    script.setAttribute(pair[0], pair[1]);
+                } catch(ex) {
+                }
+            }
             const where = doc.head || doc.documentElement;
             if ( where === null ) { return false; }
             const written = writtenBy(script);
@@ -289,7 +346,10 @@ function consentRRGtmTag(url = '', needs = '', when = '') {
             where.appendChild(script);
             say('injected=' + wanted.href +
                 (given(needs) ? ' waited=' + needs : '') +
-                (given(when) ? ' when=' + when : ''));
+                (given(when) ? ' when=' + when : '') +
+                (attrs.length !== 0
+                    ? ' with=' + attrs.map(pair => pair[0]).join(',')
+                    : ''));
             return true;
         } catch(ex) {
         }
