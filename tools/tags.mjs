@@ -67,7 +67,10 @@ const fetchContainer = async id => {
 const splitArray = (text, key) => {
     const at = text.indexOf('"' + key + '":[');
     if ( at === -1 ) { return []; }
-    const start = text.indexOf('[', at);
+    return splitFrom(text, text.indexOf('[', at));
+};
+
+const splitFrom = (text, start) => {
     const out = [];
     let depth = 0;
     let inString = false;
@@ -156,6 +159,43 @@ const triggersFrom = text => {
     return byTag;
 };
 
+// A tag's html, in both forms GTM stores it in. A plain string, or - when a
+// container variable is interpolated into the tag - an array:
+//
+//   "vtp_html":["template","\u003Cscript\u003E...",["macro",7],"..."]
+//
+// 24 of the 203 __html tags in one real container are in that second form,
+// and reading only the string form skipped every one of them silently. The
+// string pieces are what can be read; a macro is a value only the container
+// resolves, so it is marked and left in place.
+const htmlFrom = entry => {
+    const key = '"vtp_html":';
+    const at = entry.indexOf(key);
+    if ( at === -1 ) { return ''; }
+    const rest = entry.slice(at + key.length);
+    if ( rest.startsWith('"') ) {
+        const one = /^"((?:[^"\\]|\\.)*)"/.exec(rest);
+        return one === null ? '' : unescape(one[1]);
+    }
+    if ( rest.startsWith('[') === false ) { return ''; }
+    const parts = splitFrom(rest, 0);
+    const out = [];
+    for ( const part of parts ) {
+        const piece = part.trim();
+        if ( piece === '"template"' ) { continue; }
+        if ( piece.startsWith('"') ) {
+            const one = /^"((?:[^"\\]|\\.)*)"/.exec(piece);
+            if ( one !== null ) { out.push(unescape(one[1])); }
+            continue;
+        }
+        if ( piece.startsWith('[') ) {
+            const macro = /\["macro",(\d+)\]/.exec(piece);
+            out.push(macro !== null ? '{{macro ' + macro[1] + '}}' : '{{value}}');
+        }
+    }
+    return out.join('');
+};
+
 // Every __html tag, with what it would inject and what the container says it
 // is for. Their "metadata" often names the purpose - both the OneTrust and
 // the Maps entry in petzl's container are tagged ["map"].
@@ -167,9 +207,8 @@ const tagsFrom = text => {
     for ( let index = 0; index < entries.length; index++ ) {
         const entry = entries[index];
         if ( entry.includes('"function":"__html"') === false ) { continue; }
-        const raw = /"vtp_html":"((?:[^"\\]|\\.)*)"/.exec(entry);
-        if ( raw === null ) { continue; }
-        const html = unescape(raw[1]);
+        const html = htmlFrom(entry);
+        if ( html === '' ) { continue; }
         // Scripts only. A src= anywhere would do, and did: shonenjumpplus's
         // container writes banner HTML into the page, and every <img src> in
         // it was reported as a script the container loads.

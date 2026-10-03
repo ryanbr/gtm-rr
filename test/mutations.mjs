@@ -62,9 +62,11 @@ export default [
     },
 
     {
+        // One line now, for both spellings of a page's wait: the guard goes
+        // back where the callback was found, GTM's field or gtag's.
         label: 'no once-guard on the page callback',
         file: CORE,
-        from: '                item.eventCallback = guard;',
+        from: '                holder[field] = guard;',
         to: '',
     },
     {
@@ -566,12 +568,6 @@ export default [
         from: '            if ( item.length !== 3 ) { return null; }\n' +
             "            if ( item[0] !== 'event' ) { return null; }\n" +
             "            if ( typeof item[1] !== 'string' ) { return null; }",
-        to: '',
-    },
-    {
-        label: 'gtag: the callback is answered more than once',
-        file: CORE,
-        from: '                holder[field] = guard;',
         to: '',
     },
     {
