@@ -224,6 +224,10 @@ www.medibankoshc.com.au##+js(gtm-tag, https://lptag.liveperson.net/tag/tag.js?si
 !
 ! That page needs one more thing, which is its own flag rather than anything
 ! GTM left behind - the site's own "the banner has been dealt with" marker.
+!
+! NOTE: set-local-storage-item is uBO's OWN built-in scriptlet, not a resource
+! from this repo. It is listed here only because it completes this site, and
+! it works with no user resource installed.
 ! Field-confirmed: with this line and the two redirect rules, the video plays.
 ! No exception on gtm.js, and none on gpt.js either - the gpt.js whitelist
 ! that looked necessary was uBO's GPT resource throwing, and this repo's
