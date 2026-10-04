@@ -45,7 +45,7 @@ is one setting on **one line**: the name, then every URL you want, separated
 by spaces.
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.15.0/dist/gtm-rr-all.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.16.0/dist/gtm-rr-all.js
 ```
 
 **One URL carries all three.** A resources file holds as many resources as it
@@ -57,7 +57,7 @@ built from the same files and the tests check it holds them unchanged.
 To install only some of them, name those instead - still on the one line:
 
 ```
-userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.15.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.15.0/dist/gtm-tag.js
+userResourcesLocation https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.16.0/dist/googletagmanager_gtm.js https://raw.githubusercontent.com/ryanbr/gtm-rr/v1.16.0/dist/gtm-tag.js
 ```
 
 **One URL per line does not work, and fails quietly.** uBO reads a hidden
@@ -76,7 +76,7 @@ straight away: the parsed set is cached in a selfie, invalidated on
 reason to pin a tag.
 
 These are pinned to a release, so an install stays where it is until you move
-it. `main` in place of `v1.15.0` follows the branch instead, which is useful for
+it. `main` in place of `v1.16.0` follows the branch instead, which is useful for
 testing a fix and not for leaving in place.
 
 **Use the redirect and the scriptlet together.** `filters/gtm.txt` carries the
@@ -922,6 +922,73 @@ Worth knowing: the per-site cases are also the ones that need the resource
 **installed**, so they are not available to uBO Lite, whose built-in resource
 takes no arguments. There, an exception on the container is still the answer.
 
+## Google Publisher Tag, and why that is in here
+
+`googletagservices_gpt.js` ships here too, under uBO's own resource name, so
+it replaces their built-in the same way `googletagmanager_gtm.js` does. **No
+filter is needed**: uBO's lists already redirect `gpt.js` to that name, so
+installing this repo is the whole of it.
+
+It is here because theirs throws. **28 documented, publisher-facing GPT calls
+raise a `TypeError` on it** rather than answering, which takes out the rest of
+whatever function the page was in:
+
+| call | on uBO's |
+|---|---|
+| `slot.getResponseInformation().lineItemId` | returns `null`, so the field read throws |
+| `googletag.enums.OutOfPageFormat.REWARDED` | `enums` absent - throws on the property |
+| `googletag.setConfig({…})`, `getConfig(…)` | not a function |
+| `googletag.secureSignalProviders.push({…})` | absent, and absent from AdGuard's too |
+| `googletag.defineUnit(…)` | absent; `defineUnit === defineSlot` on the real file |
+| `pubads().setTagForUnderAgeOfConsent(1)` | not a function |
+| `pubads().isInitialLoadDisabled()` | not a function |
+| `slot.setForceSafeFrame(true)` | not a function |
+| 20 more on the slot, `companionAds()` and `content()` | not functions |
+
+**Allowing the real file and blocking it both leave a page coherent. A stub
+that throws is the only outcome that does neither**, and that is the whole
+argument for replacing a resource that otherwise works.
+
+The surface was **enumerated from the real `gpt.js` in a browser**, not copied
+from another resource - `Object.getOwnPropertyNames` up the prototype chain of
+each object. The real file carries `googletag` 29 names, `pubads()` 51,
+`defineSlot(…)` 37, `sizeMapping()` 2, `companionAds()` 14, `content()` 6, and
+`secureSignalProviders` 4 - which is **not an array**, whatever the name
+suggests. This answers all of them and does nothing, with three extras kept
+because uBO's has carried them for years and a page may be written against
+theirs: `pubadsReady`, `slot.getDomId`, `companionAds().enableSyncLoading`.
+
+Two rules it keeps from the rest of this repo:
+
+- **No invented ids.** `getCorrelator()` answers `''` and
+  `getTagSessionCorrelator()` answers `0`. The real ones join a page's
+  requests together; minting one here would be this resource creating the
+  thing the blocking exists to prevent.
+- **No signal collection.** `secureSignalProviders.push` does nothing, so a
+  third party's `collectorFunction` is never invoked and no encrypted signal
+  is generated, let alone sent. Anything the page queued before this arrived
+  is left where it is, because draining it would run those collectors.
+
+**It does answer the slot events a page branches on.** A great deal of
+publisher code is shaped like
+
+```js
+googletag.pubads().addEventListener('slotRenderEnded', e => {
+    if ( e.isEmpty ) { collapse(div); } else { show(div); } });
+```
+
+and a resource that registers that listener and never calls it leaves the page
+mid-decision, so a slot meant to collapse when empty stays open for ever. All
+five fire - `slotRequested`, `slotResponseReceived`, `slotRenderEnded`,
+`slotOnload`, `impressionViewable` - deferred, with `isEmpty: true`, which is
+the truth. It builds no `google_ads_iframe_*`: an event is a page's own
+question answered, while an iframe carrying `data-load-complete` is a prop for
+something checking whether an ad rendered, and that is a different business.
+
+[comparison-ubo-adguard.md](comparison-ubo-adguard.md) has the measurements
+this was built from, including where AdGuard's resource goes further and why
+that part was not copied.
+
 ## Why an opt-out as well as a stub
 
 A redirect needs a URL to match. Where a site serves the loader from its own
@@ -949,12 +1016,8 @@ for, and the event is dropped by their own pipeline:
 - Not a stub for `gtag/js`, which is a different loader with its own contract.
   `ga-optout.js` quietens a real one; it does not replace it.
 - Not a way to let a container's tags run. Nothing is fetched or fired.
-- Not a Google Publisher Tag stand-in. GPT is not one of Google's tag manager
-  loaders and uBO already carries a resource of that name.
-  [comparison-ubo-adguard.md](comparison-ubo-adguard.md) measures uBO's against
-  AdGuard's, because it is the nearest relative of what this does and because
-  three of its methods throw where a stub should answer - which is a mistake
-  worth not repeating here.
+- Not a consent manager, still. For those, see
+  [consent-rr](https://github.com/ryanbr/consent-rr).
 
 ## Working on it
 

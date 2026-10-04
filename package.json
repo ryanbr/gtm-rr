@@ -1,6 +1,6 @@
 {
   "name": "gtm-rr",
-  "version": "1.15.0",
+  "version": "1.16.0",
   "description": "Google Tag Manager resource replacements for uBlock Origin",
   "license": "GPL-3.0-or-later",
   "author": "ryanbr",
@@ -13,7 +13,8 @@
   "resourceVersions": {
     "gtm": "1.8.0",
     "ga": "1.0.0",
-    "tag": "1.6.0"
+    "tag": "1.6.0",
+    "gpt": "1.0.0"
   },
   "scripts": {
     "build": "node tools/build.mjs",

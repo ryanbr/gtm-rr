@@ -1,0 +1,56 @@
+[uBlock Origin]
+! Title: gtm-rr - googletagservices_gpt
+! Description: Notes for googletagservices_gpt.js, which replaces uBlock
+!              Origin's resource of the same name.
+! Expires: 7 days
+! Homepage: https://github.com/ryanbr/gtm-rr
+! -----------------------------------------------------------------------------
+
+! -----------------------------------------------------------------------------
+! NO FILTER IS NEEDED FOR THIS ONE.
+!
+! uBO's own lists already redirect Google Publisher Tag:
+!
+!   ||securepubads.g.doubleclick.net/tag/js/gpt.js$script,redirect=googletagservices_gpt.js:5
+!   ||pagead2.googlesyndication.com/tag/js/gpt.js$script,redirect=googletagservices_gpt.js:5
+!
+! and a user resource of a built-in's name replaces the built-in - uBO awaits
+! loadBuiltinResources first and parses userResourcesLocation after it, into
+! the same Map. So installing this repo is the whole of it: those rules start
+! serving this instead, on every site they already cover.
+!
+! Which also means it has to be at least as safe as what it displaces. The
+! reason it exists is that theirs throws: 28 documented, publisher-facing GPT
+! calls raise a TypeError on it rather than answering, and a stub that throws
+! is worse than either a noop or the real file, because allowing and blocking
+! both leave a page coherent.
+!
+! The surface here was enumerated from the real gpt.js in a browser, not
+! copied from another resource: googletag 29 names, pubads() 51,
+! defineSlot(...) 37, companionAds() 14, content() 6, and
+! secureSignalProviders 4 - which is NOT an array, whatever the name suggests.
+!
+! It answers everything and does nothing. Two rules it keeps from the rest of
+! this repo:
+!
+!   no invented ids       getCorrelator() answers '' and
+!                         getTagSessionCorrelator() answers 0. The real ones
+!                         join a page's requests together, and minting one
+!                         here would be this resource creating the thing the
+!                         blocking exists to prevent.
+!   no signal collection  secureSignalProviders.push does nothing, so a third
+!                         party's collectorFunction is never invoked and no
+!                         encrypted signal is generated, let alone sent.
+!                         Anything queued before this arrived is left alone,
+!                         because draining it would run those collectors.
+!
+! It does answer the slot events a page branches on - slotRequested,
+! slotResponseReceived, slotRenderEnded, slotOnload, impressionViewable - with
+! isEmpty true, because a page that waits to find out whether its slot filled
+! should be told, and a resource that registers the listener and never calls
+! it leaves the page mid-decision. It does not build a google_ads_iframe_* in
+! the slot: an event is a page's own question answered, an iframe carrying
+! data-load-complete is a prop for something checking whether an ad rendered.
+!
+! To see it work: localStorage.setItem('gtm-rr-debug', 'verbose') and reload.
+! -----------------------------------------------------------------------------

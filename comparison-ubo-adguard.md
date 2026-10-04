@@ -150,9 +150,11 @@ are dispatched. Both evaluated into the same blank page holding one
 | `googletag.setConfig({…})` | **throws** - not a function | ok | n/a |
 | `pubads().isInitialLoadDisabled()` | **throws** - not a function | `false` | n/a |
 
-`n/a` throughout: this repo ships no GPT resource, so a page replacing gpt.js
-is served uBO's. The column is here so the answer to "where is this repo in
-this comparison" is stated rather than inferred.
+Those `n/a`s were true when this document was written and are not any more:
+this repo now ships `googletagservices_gpt.js` under uBO's own name, so the
+rules that already redirect `gpt.js` serve it instead. See **gpt.js: measured
+against the real file** below, which is the table that matters - comparing two
+stand-ins to each other was always the weaker question.
 
 Identical in both: `cmd.push` runs its callback synchronously inside a
 `try`/`catch`, returns `1`, and drains whatever the page queued before the
@@ -162,6 +164,32 @@ it wrong.
 AdGuard's slot events fire through `requestAnimationFrame`, so they are
 asynchronous - a page that calls `display()` and reads state on the next line
 sees nothing yet, in either resource.
+
+## gpt.js: measured against the real file
+
+The reference that should have been used from the start. The real `gpt.js`
+enumerated in a browser - `Object.getOwnPropertyNames` up the prototype chain
+of each object - against all three resources:
+
+| object | real | uBO | AdGuard | this repo |
+|---|---|---|---|---|
+| `googletag` | 29 | 15 | 17 | **29** |
+| `pubads()` | 51 | 36 | 37 | **51** |
+| `defineSlot(…)` | 37 | 20 | 38 | **37** |
+| `sizeMapping()` | 2 | 2 | 2 | **2** |
+| `companionAds()` | 14 | 3 | 5 | **14** |
+| `content()` | 6 | 2 | 3 | **6** |
+| `secureSignalProviders` | 4 | 0 | 0 | **4** |
+
+AdGuard's `defineSlot` shows 38 against the real 37 because it synthesises
+`getId`, `setTagForChildDirectedTreatment` and `toString`, which the real file
+does not carry - and that is the mistake this table exists to prevent. The
+first version of the uBO report counted `slot.getId` and
+`slot.setTagForChildDirectedTreatment` as defects on the strength of AdGuard
+having them. They are absent from the real file too, so throwing on them is
+faithful. **A superset of another stand-in is not a measure of anything; the
+real file is.** Corrected, 28 calls throw on uBO's, every one of them present
+on the real file.
 
 ## gpt.js: the publisher-facing surface
 

@@ -15,6 +15,7 @@ const CORE = 'src/shared/lib/core.js';
 const GTM = 'src/gtm/lib/gtm-core.js';
 const GA = 'src/ga/lib/ga-optout-core.js';
 const TAG = 'src/tag/gtm-tag.js';
+const GPT = 'src/gpt/googletagservices_gpt.js';
 // The build too: what it emits is what ships, so the one-file delivery is
 // worth the same treatment as the resources in it.
 const BUILD = 'tools/build.mjs';
@@ -1203,5 +1204,78 @@ export default [
         file: GTM,
         from: '                                get: ( ) => undefined,',
         to: "                                get: ( ) => 'GA1.2.1234567890.1234567890',",
+    },
+    {
+        label: 'gpt: getResponseInformation is null again',
+        file: GPT,
+        from: '            getResponseInformation: noopObj,',
+        to: '            getResponseInformation: noopNull,',
+    },
+    {
+        label: 'gpt: the enums only map one way',
+        file: GPT,
+        from: '            out[pair[1]] = pair[0];',
+        to: '            out[pair[1]] = pair[1];',
+    },
+    {
+        label: 'gpt: a correlator is minted',
+        file: GPT,
+        from: '        getCorrelator: noopStr,',
+        to: "        getCorrelator: ( ) => '3678757495670259',",
+    },
+    {
+        label: 'gpt: a secure signal collector is run',
+        file: GPT,
+        from: '        push: noop,\n        addErrorHandler: noop,',
+        to: '        push: p => { try { p.collectorFunction(); } catch(e) {} },\n' +
+            '        addErrorHandler: noop,',
+    },
+    {
+        label: 'gpt: the slot events never fire',
+        file: GPT,
+        from: '        fireFor(slot);',
+        to: '            return;',
+    },
+    {
+        label: 'gpt: the events fire inside display()',
+        file: GPT,
+        from: '                    w.setTimeout(( ) => {',
+        to: '                    (( ) => {',
+    },
+    {
+        label: 'gpt: slotRenderEnded says the slot filled',
+        file: GPT,
+        from: '                    isEmpty: true,',
+        to: '                    isEmpty: false,',
+    },
+    {
+        label: 'gpt: a second evaluation takes the page over',
+        file: GPT,
+        from: '        if ( gpt.consentRRGpt !== undefined ) { return; }',
+        to: '        if ( false ) { return; }',
+    },
+    {
+        label: 'gpt: a div gets a fresh slot every time',
+        file: GPT,
+        from: '        if ( slots.has(id) === false ) { slots.set(id, makeSlot(path, id)); }',
+        to: '        slots.set(id, makeSlot(path, id));',
+    },
+    {
+        label: 'gpt: the page own queue is dropped',
+        file: GPT,
+        from: '        gpt.cmd.push(queued.shift());',
+        to: '        queued.shift();',
+    },
+    {
+        label: 'gpt: a listener cannot be taken off',
+        file: GPT,
+        from: '            had.splice(at, 1);',
+        to: '            return true;',
+    },
+    {
+        label: 'gpt: defineUnit is not defineSlot',
+        file: GPT,
+        from: '    gpt.defineUnit = defineSlot;',
+        to: '    gpt.defineUnit = noop;',
     },
 ];
