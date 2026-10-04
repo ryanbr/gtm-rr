@@ -651,22 +651,32 @@ There is no `__tcfapiLocator` frame, deliberately: that exists so third party
 frames can `postMessage` the CMP for a consent string, and there is nothing
 here for them to have.
 
-**Two things this does not fix on that page, and they are worth separating.**
+**One thing it does not fix, and the page needs it.**
 `localStorage.cookieChoiceMade` is the site's own "the banner has been dealt
-with" flag, which is site-specific and already has a uBO scriptlet - and
-`'true'` is one of uBO's safe values, so the untrusted form does it:
+with" flag - site-specific, and already a uBO scriptlet. `'true'` is one of
+uBO's safe values, so the untrusted form does it:
 
 ```
 www.nowtv.com.tr##+js(set-local-storage-item, cookieChoiceMade, true)
 ```
 
-And their player is `/js/app.js`, first party, which touches `googletag` 47
-times. That is a GPT dependency inside the player itself, nothing to do with
-the container, so if `gpt.js` has to be allowed for playback that is a
-question about uBO's GPT surrogate and not something this resource can answer.
-Reported from the field and not reproduced here: playback on that site does
-not start in a headless browser even with everything allowed, so the claim is
-recorded rather than measured.
+**Field-confirmed: that line and the two redirect rules are the whole of it.**
+No exception on `gtm.js`, and none on `gpt.js` either.
+
+The `gpt.js` whitelist that looked necessary for a while is worth recording,
+because the explanation was somewhere neither of us was looking. Their player
+is first-party `/js/app.js` and touches `googletag` 47 times, so it reads a
+lot of GPT - and uBO's `googletagservices_gpt.js` throws on 65 of the real
+file's 141 callable names. Allowing the real `gpt.js` made those calls land;
+so does replacing that resource with the one here, which answers all 141. The
+whitelist was never about the container at all.
+
+Two measurement lessons from getting there, since both were mine: counting
+`<video>` elements and `data-player-inited` measures a player being
+*constructed*, not playback - and a control run matters, because that page
+never reaches playback in a headless browser even with everything allowed, so
+every conclusion drawn from it was noise. The report was right twice while the
+measurements said otherwise.
 
 ### A wait with a name only the page knows
 

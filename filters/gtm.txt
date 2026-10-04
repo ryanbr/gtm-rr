@@ -223,10 +223,13 @@ www.medibankoshc.com.au##+js(gtm-tag, https://lptag.liveperson.net/tag/tag.js?si
 ! it spins for ever.
 !
 ! That page needs one more thing, which is its own flag rather than anything
-! GTM left behind:
-!
-!   www.nowtv.com.tr##+js(set-local-storage-item, cookieChoiceMade, true)
+! GTM left behind - the site's own "the banner has been dealt with" marker.
+! Field-confirmed: with this line and the two redirect rules, the video plays.
+! No exception on gtm.js, and none on gpt.js either - the gpt.js whitelist
+! that looked necessary was uBO's GPT resource throwing, and this repo's
+! googletagservices_gpt.js answers instead. See filters/gpt.txt.
 ! -----------------------------------------------------------------------------
+www.nowtv.com.tr##+js(set-local-storage-item, cookieChoiceMade, true)
 
 ! -----------------------------------------------------------------------------
 ! Where a page waits for the global an SDK the container would have injected
