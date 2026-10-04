@@ -54,8 +54,9 @@ anything that walks a stack to find *the page's* frame has to drop frames by
 **source**, never by function name. That was got wrong twice before the field
 showed it.
 
-`+js(gtm-neutered)` takes no `.js`; `redirect=gtm-neutered.js` takes the full
-name. A wrong token injects nothing and says nothing.
+A scriptlet token takes no `.js` - `+js(gtm-tag, …)` - and `redirect=` takes
+the full name, `redirect=googletagmanager_gtm.js`. A wrong token injects
+nothing and says nothing.
 
 ## Fidelity comes from evidence, not from documentation
 
@@ -442,8 +443,65 @@ word, so the resource was simply missing with nothing to see anywhere. CI now
 checks each pinned URL resolves (via the API, since the raw host caches a 404
 for minutes), which means a bump pushed without its tag fails the build.
 
+**And a tag that resolves is not a tag that is current, which is the same bug
+one level along.** v1.10.0 existed and served `gtm-tag` 1.3.0 while `main` had
+1.4.0, so the documented install delivered a resource three commits old and a
+filter written for the new one did nothing - reported as "the filter isn't
+working", which it was. Resolving was never the question; being the same code
+was. A second CI step compares the `VERSION` in each `dist` file against what
+the pinned ref actually serves:
+
+```
+STALE gtm-tag.js: v1.10.0 serves 1.3.0, this commit builds 1.4.0
+```
+
+So **a resource bump now has to come with its release.** That is the right
+amount of friction: a bump nobody can fetch is a bump that did not happen.
+"Most pushes are not releases" still holds for docs and tests - not for
+anything under `src/`.
+
 Nothing is published to npm. A `cdn.jsdelivr.net/npm/...` URL would need that,
 so none is offered.
+
+## Replacing a resource that already works
+
+`googletagservices_gpt.js` ships here under uBO's own name, which means uBO's
+existing `gpt.js` redirects serve this instead with no filter involved. Taking
+over a resource that works needs a better reason than preference, and the
+reason is that theirs throws: 65 of the 141 callable names on the real
+`gpt.js` raise a `TypeError` on it rather than answering.
+
+Two rules came out of building it, and both generalise past GPT.
+
+**Answer input you do not implement; do not throw at the caller.** Allowing a
+file and blocking it both leave a page coherent. A stub that throws is the
+only outcome that does neither - it breaks the page's own code at its own call
+site, mid-function. This is why the TCF stand-in answers an unknown command
+with `callback(null, false)`, and why `getResponseInformation()` returns `{}`
+rather than `null`: every caller reads a field off it.
+
+**Measure against the real file, not against another stand-in.** The first
+version of the uBO report was built by diffing their resource against
+AdGuard's and treating the difference as the defect list. That was wrong in
+both directions: two entries were not defects at all (`slot.getId` and
+`slot.setTagForChildDirectedTreatment` are absent from the real file too, so
+throwing on them is faithful), and everything missing from *both* projects
+never appeared - which hid `secureSignalProviders`, `enums`, `defineUnit` and
+35 others. **A superset of someone else's stand-in measures nothing.** Load
+the real file in a browser and walk the prototype chains:
+
+```js
+for ( let p = o; p && p !== Object.prototype; p = Object.getPrototypeOf(p) ) {
+    for ( const k of Object.getOwnPropertyNames(p) ) { … }
+}
+```
+
+Corrected that way the count went **up**, 24 to 65. Where AdGuard goes
+further still - slot identity, targeting state, a `display()` that builds a
+`google_ads_iframe_*` - that is a working fake rather than a stub, and only
+the slot events were worth taking: a page branching on `isEmpty` to collapse
+an empty slot is a wait, and answering waits is what this repo is for. An
+iframe carrying `data-load-complete` is a prop for a detector, which is not.
 
 ## Reference
 
