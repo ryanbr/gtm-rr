@@ -239,15 +239,13 @@ export default [
         to: '',
     },
     {
+        // Re-anchored when the stub grew a hitCallback answer: the block it
+        // used to name is gone, and the guard says the same thing. Its pair
+        // below flips the other way, to the stub replacing one already there.
         label: 'the ga noop uBO put up is dropped',
         file: GTM,
-        from: `            if ( typeof w.ga !== 'function' ) {
-                w.ga = function( ) {
-                    if ( gaCalls === null ) { return; }
-                    gaCalls(arguments);
-                };
-            }`,
-        to: '',
+        from: "            if ( typeof w.ga !== 'function' ) {",
+        to: '            if ( false ) {',
     },
     {
         label: 'a better ga stub is overwritten',
@@ -1175,5 +1173,35 @@ export default [
         file: GTM,
         from: '                    data.listenerId = next;',
         to: '                    next += 0;',
+    },
+    {
+        label: 'ga: hitCallback in a trailing object is dropped',
+        file: GTM,
+        from: '                    return last.hitCallback;',
+        to: '                    return null;',
+    },
+    {
+        label: 'ga: a trailing function is dropped',
+        file: GTM,
+        from: "                if ( typeof last === 'function' ) { return last; }",
+        to: '                if ( false ) { return last; }',
+    },
+    {
+        label: 'ga: hitCallback given positionally is dropped',
+        file: GTM,
+        from: '                    return list[at + 1];',
+        to: '                    return null;',
+    },
+    {
+        label: 'ga: the callback is answered inside the call',
+        file: GTM,
+        from: '                        w.setTimeout(called, 1);',
+        to: '                        called();',
+    },
+    {
+        label: 'ga: the tracker handed over knows a client id',
+        file: GTM,
+        from: '                                get: ( ) => undefined,',
+        to: "                                get: ( ) => 'GA1.2.1234567890.1234567890',",
     },
 ];

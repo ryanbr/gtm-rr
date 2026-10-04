@@ -177,11 +177,67 @@ function consentRRGtm(a1 = '', a2 = '', a3 = '') {
         // but only once there is a loader to stand in for. Injected as a
         // scriptlet this runs on every page the rule covers, and a page with
         // no container has no business growing a ga() either.
+        //
+        // It answers hitCallback, which is a page's wait in its third
+        // spelling and the one this stub owns. uBO's analytics surrogate
+        // answers it and theirs wins where it applies - but where
+        // analytics.js was blocked with no surrogate of its own, this is the
+        // only ga on the page, and a page that navigates from hitCallback has
+        // a dead link if nothing calls it. Measured against their resource
+        // and AdGuard's: AdGuard answers it from their gtm stand-in, uBO's
+        // does not, and nor did this.
+        //
+        // Their three shapes, from google-analytics_analytics.js: the trailing
+        // options object, a trailing function, and 'hitCallback' as a
+        // positional argument followed by one.
+        const hitting = args => {
+            try {
+                const last = args[args.length - 1];
+                if ( last !== null && typeof last === 'object' &&
+                    typeof last.hitCallback === 'function' )
+                {
+                    return last.hitCallback;
+                }
+                if ( typeof last === 'function' ) { return last; }
+                const list = [].slice.call(args);
+                const at = list.indexOf('hitCallback');
+                if ( at !== -1 && typeof list[at + 1] === 'function' ) {
+                    return list[at + 1];
+                }
+            } catch(ex) {
+            }
+            return null;
+        };
         try {
             if ( typeof w.ga !== 'function' ) {
                 w.ga = function( ) {
-                    if ( gaCalls === null ) { return; }
-                    gaCalls(arguments);
+                    const answer = hitting(arguments);
+                    if ( gaCalls !== null ) { gaCalls(arguments); }
+                    if ( answer === null ) { return; }
+                    // Deferred, because theirs answers after the hit rather
+                    // than inside the call, and a page that navigates from it
+                    // should not do so before its own line has finished.
+                    const called = ( ) => {
+                        try {
+                            // The trailing-function shape is handed a
+                            // tracker, which theirs builds with ga.create().
+                            // This hands over one that answers and knows
+                            // nothing: a get() returning a client id would be
+                            // this resource minting a tracking id, which is
+                            // the line gtag('get', ...) already refuses.
+                            answer({
+                                get: ( ) => undefined,
+                                set: ( ) => undefined,
+                                send: ( ) => undefined,
+                            });
+                        } catch(ex) {
+                        }
+                    };
+                    try {
+                        w.setTimeout(called, 1);
+                    } catch(ex) {
+                        called();
+                    }
                 };
             }
         } catch(ex) {

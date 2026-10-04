@@ -51,6 +51,9 @@ whose request each resource answers.
 | an unknown registry method | absent | absent | throws |
 | `eventCallback` on a push is called | yes | yes | yes |
 | gtag's `event_callback` is called | **no** | yes | yes |
+| `ga(…, { hitCallback })` is called | **no** | yes | yes |
+| a nested `event_callback` is found | no | yes | no |
+| a plain `callback` in an array push | no | yes | no |
 | `gtag('get', id, field, cb)` answers | never | never | **`undefined`, deferred** |
 | a consent state is published | none | none | **`C0001,C0002,C0003`** |
 | `__tcfapi` answers | absent | absent | **`tcloaded`** |
@@ -77,6 +80,28 @@ four-second timer.
 `gtag('event', name, {…})`, which reaches the layer as an arguments object
 rather than as a field on anything. uBO answers the first and not the second,
 so a page whose links open from a gtag event has no working links.
+
+**`hitCallback`, which is a third spelling, and two more that are not taken.**
+AdGuard answers all three; neither uBO's gtm stub nor this repo did. The one
+that came back here is `ga('send', 'pageview', { hitCallback: fn })`, because
+this resource puts up `window.ga` itself - so where analytics.js was blocked
+with no surrogate of its own, that stub is the only `ga` on the page, and a
+page navigating from the callback had a dead link. gtm 1.8.0 answers uBO's
+three shapes for it: the trailing options object, a trailing function, and
+`'hitCallback'` as a positional argument followed by one.
+
+The other two are deliberately left alone. `dataLayer.push([ { callback } ])`
+is the `_gaq` shape, and AdGuard answers it because one resource of theirs
+serves both analytics.js and gtm.js; this repo's does not. A nested
+`event_callback` - `{ event: 'x', params: { event_callback } }` - could not be
+tied to anything a real page does, and copying surface on the strength of
+another project having it is how a stand-in grows ways to be wrong.
+
+One divergence from uBO inside the part that was taken: their surrogate hands
+the trailing-function shape a tracker built with `ga.create()`. This hands
+over one whose `get()` answers `undefined`, because a `get('clientId')`
+returning something plausible would be this resource minting a tracking id -
+the line `gtag('get', …)` already refuses to cross. A mutation pins it.
 
 **The unknown registry method throws here, and that is deliberate.** Reading an
 undocumented property off `google_tag_manager[id]` and calling it throws
@@ -197,6 +222,42 @@ googletag.pubads().addEventListener('slotRenderEnded', e => {
 
 and with uBO's resource that listener is registered and never called, so
 neither branch runs. The page is left mid-decision rather than told "empty".
+
+## Privacy: there is nothing here to learn
+
+Worth recording as a negative result, because it is the question that prompted
+half this document. Neither project does anything privacy-*active* in its
+Google resources. Searched across uBO's `googletagmanager_gtm.js`,
+`google-analytics_analytics.js`, `google-analytics_ga.js` and
+`googlesyndication_adsbygoogle.js`, and AdGuard's `google-analytics.js`, for
+
+```
+gaOptout   ga-disable   doNotTrack   google_tag_data
+_gl   gclid   document.cookie   removeItem
+```
+
+the only hits in the whole set are `hitCallback` and AdGuard's
+`google_optimize.get -> noopFunc`. No opt-out flag is set, no cookie is
+cleared, no link decoration is stripped, and neither defines
+`google_tag_data`. The philosophy on both sides is "do not let it run, keep
+the page working", and the privacy comes entirely from the request never being
+made.
+
+By that measure this repo is the most privacy-active of the three, which is a
+statement about scope rather than virtue:
+
+| | uBO | AdGuard | this repo |
+|---|---|---|---|
+| turns on Google's own opt-out | no | no | yes - `ga-optout.js`, `window['ga-disable-<id>']` |
+| answers the TCF API | no | no | yes, as a refusal: `gdprApplies: true`, zero consents |
+| refuses to mint an id | n/a | n/a | `gtag('get', …)` answers `undefined`; the `ga` tracker's `get()` too |
+| publishes a page-side consent state | no | no | yes, and `consent=off` removes it |
+
+The one idea worth stealing is the direction of travel, not a mechanism:
+**a stand-in that answers a page's wait removes the reason for an exception,
+and an exception is what actually costs privacy.** Every row of the gtm.js
+table above is that argument in miniature - the container exception a site
+needs is the whole container, pixels included.
 
 ## Benefits, honestly
 
