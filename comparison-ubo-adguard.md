@@ -1,46 +1,133 @@
-# googletagservices_gpt.js: uBlock Origin vs AdGuard
+# Stand-ins for Google's tag scripts: uBO, AdGuard and this repo
 
-Two block-and-replace resources for the same file - Google Publisher Tag,
-`securepubads.g.doubleclick.net/tag/js/gpt.js` and its
-`pagead2.googlesyndication.com` twin - written to opposite philosophies.
+Three projects replace the same scripts with their own, to different ends.
+Everything below is measured - each resource served as the file a real page
+asks for, then probed with what page code actually does - not read off the
+source. The scripts that produce the tables are at the bottom.
 
-**This repo ships neither, and should not.** GPT is not one of Google's tag
-manager loaders, uBO already carries a built-in resource of that name, and a
-third one would collide rather than help. The comparison is here because it
-came out of chasing a real breakage, because it is the nearest relative of what
-`googletagmanager_gtm.js` does, and because one row in it is a lesson this repo
-has to apply to its own stubs.
+Two files are compared, and only one of them is this repo's business:
 
-Sources, and the versions everything below was measured against:
+- **`googletagmanager.com/gtm.js`**, where all three ship something.
+- **`gpt.js`** (Google Publisher Tag), where this repo ships nothing and
+  should not. It is not a tag manager loader, uBO already carries a resource
+  of that name, and a third would collide. It is here because it came out of
+  chasing a real breakage, it is the nearest relative of what this repo does,
+  and one row in it is a lesson that applies here.
+
+Versions everything was measured against:
 
 | | file | lines |
 |---|---|---|
-| uBO | [`src/web_accessible_resources/googletagservices_gpt.js`](https://github.com/gorhill/uBlock/blob/master/src/web_accessible_resources/googletagservices_gpt.js) @ `615a71a58` | 154 |
-| AdGuard | [`src/redirects/googletagservices-gpt.js`](https://github.com/AdguardTeam/Scriptlets/blob/master/src/redirects/googletagservices-gpt.js) @ `31b68c9a4` | 455 |
+| uBO gtm | [`googletagmanager_gtm.js`](https://github.com/gorhill/uBlock/blob/master/src/web_accessible_resources/googletagmanager_gtm.js) @ `615a71a58` | 43 |
+| AdGuard gtm | [`src/redirects/google-analytics.js`](https://github.com/AdguardTeam/Scriptlets/blob/master/src/redirects/google-analytics.js) @ `31b68c9a4` | 158 |
+| this repo | `dist/googletagmanager_gtm.js` | 1400 |
+| uBO gpt | [`googletagservices_gpt.js`](https://github.com/gorhill/uBlock/blob/master/src/web_accessible_resources/googletagservices_gpt.js) @ `615a71a58` | 154 |
+| AdGuard gpt | [`src/redirects/googletagservices-gpt.js`](https://github.com/AdguardTeam/Scriptlets/blob/master/src/redirects/googletagservices-gpt.js) @ `31b68c9a4` | 455 |
+
+**AdGuard has no gtm.js resource of its own any more.** Their
+`googletagmanager-gtm` redirect is [obsolete](https://github.com/AdguardTeam/Scriptlets/issues/127)
+and the name is now an alias for `google-analytics` - so a container redirected
+on their lists is answered by their Analytics mock. That is a position, not an
+oversight: it treats gtm.js as an analytics script rather than as a tag
+manager. uBO's is a 43-line stub of the same opinion.
+
+## gtm.js: what a page sees
+
+The fixture is Google's own snippet - a `dataLayer`, the anti-flicker block
+with the container id listed, a `gtag()` shim, and a `<script src=…gtm.js?id=…>`
+whose request each resource answers.
+
+| what a page does | uBO | AdGuard | this repo |
+|---|---|---|---|
+| `dataLayer` is still an array | yes | yes | yes |
+| a push made before it arrived survives | yes | yes | yes |
+| `typeof dataLayer.push({…})` | `undefined` | `function` | **`number`** |
+| anti-flicker: ends the hiding | yes | yes | yes |
+| anti-flicker: **another container still expected** | **ends it anyway** | **ends it anyway** | defers |
+| `window.ga` is callable | yes | yes | yes |
+| `window.google_tag_manager` | absent | absent | **object** |
+| `google_tag_manager[id]` | absent | absent | **present** |
+| `google_tag_manager[id].dataLayer.get(…)` | absent | absent | **answers** |
+| an unknown registry method | absent | absent | throws |
+| `eventCallback` on a push is called | yes | yes | yes |
+| gtag's `event_callback` is called | **no** | yes | yes |
+| `gtag('get', id, field, cb)` answers | never | never | **`undefined`, deferred** |
+| a consent state is published | none | none | **`C0001,C0002,C0003`** |
+| `__tcfapi` answers | absent | absent | **`tcloaded`** |
+
+Four of those rows are worth more than a tick.
+
+**`dataLayer.push`'s return.** The real one is `Array.prototype.push`, so it
+answers with the new length. uBO's replacement returns `undefined`; AdGuard's
+returns `noopFunc`, deliberately. This repo keeps the page's own array and
+returns what its push returned, so code assigning the result sees a number, as
+it would unblocked.
+
+**The anti-flicker, with a second container expected.** Google's snippet lists
+every container it waits for and the undo is only meant to run when the last
+of them reports in - their own code clears its entry, scans for any other
+still `true`, and only then calls `end()`. uBO's and AdGuard's call it
+unconditionally, which un-hides a page that a second, unblocked container is
+still loading for. This repo follows their logic and defers, reporting
+`hide=waiting`. The cost of deferring is bounded: the snippet carries its own
+four-second timer.
+
+**gtag's `event_callback`.** A page's wait has two spellings -
+`eventCallback` on a pushed object, and `event_callback` inside the params of
+`gtag('event', name, {…})`, which reaches the layer as an arguments object
+rather than as a field on anything. uBO answers the first and not the second,
+so a page whose links open from a gtag event has no working links.
+
+**The unknown registry method throws here, and that is deliberate.** Reading an
+undocumented property off `google_tag_manager[id]` and calling it throws
+against the real gtm.js too, and answering every unknown read with a function
+would make `typeof r.anything === 'function'` true, which breaks feature
+detection in the other direction. The `probe` debug level answers instead of
+failing, for diagnosis. Contrast this with the gpt.js rows below, where the
+calls that throw are *documented, publisher-facing* ones that the real file
+answers - a different thing entirely.
+
+## gtm.js: the globals each defines
+
+| | globals |
+|---|---|
+| uBO | `ga` |
+| AdGuard | `ga` (plus `google_optimize` where the page has one) |
+| this repo | `ga`, `google_tag_manager`, `OptanonActiveGroups`, `OnetrustActiveGroups`, `OneTrust`, `__tcfapi`, `consentRRGtmGave`, `consentRRGtmTcf` |
+
+This is the clearest statement of the difference in ambition, and of the cost.
+uBO and AdGuard add one name and keep a tiny footprint. This repo adds eight,
+two of which (`consentRRGtmGave`, `consentRRGtmTcf`) exist so a second copy of
+itself can tell what the first already did, and five of which are there because
+a container's absence took something a page reads. Every one of them is a
+surface a site could detect, which is the trade accepted in exchange for the
+breakages they fix - and `consent=off` removes the consent ones for anyone who
+would rather not make that trade.
+
+## gpt.js: what a page sees
 
 uBO's is noops: every method returns `undefined`, `null`, `[]`, `''` or `this`.
 AdGuard's is a working fake: slots have identity, targeting round-trips,
 `display()` builds a sandboxed `google_ads_iframe_<id>`, and five slot events
-are dispatched.
+are dispatched. Both evaluated into the same blank page holding one
+`<div id="adbox">`.
 
-## What a page sees
+| what publisher code does | uBO | AdGuard | this repo |
+|---|---|---|---|
+| `slot.getSlotElementId()` | `""` | `"adbox"` | n/a |
+| `getElementById(` that `)` is findable | `false` | **`true`** | n/a |
+| `slot.getResponseInformation().lineItemId` | **throws** - returns `null` | `undefined` | n/a |
+| `setTargeting('pos','top')` then `getTargeting('pos')` | `[]` | `["top"]` | n/a |
+| `defineSlot` twice for one div gives one slot | `false` | **`true`** | n/a |
+| `pubads().getSlots().length` after `addService` | `0` | `0` | n/a |
+| `slotRenderEnded` fires on `display()` | **never** | `isEmpty=true` | n/a |
+| `display()` leaves a `google_ads_iframe_*` | `false` | **`true`** | n/a |
+| `googletag.setConfig({…})` | **throws** - not a function | ok | n/a |
+| `pubads().isInitialLoadDisabled()` | **throws** - not a function | `false` | n/a |
 
-Measured in headless Chrome, both resources evaluated into the same blank page
-with one `<div id="adbox">`. The script that produces this table is at the
-bottom; nothing here is read off the source.
-
-| what publisher code does | uBO | AdGuard |
-|---|---|---|
-| `slot.getSlotElementId()` | `""` | `"adbox"` |
-| `getElementById(` that `)` is findable | `false` | **`true`** |
-| `slot.getResponseInformation().lineItemId` | **throws** - returns `null` | `undefined` |
-| `setTargeting('pos','top')` then `getTargeting('pos')` | `[]` | `["top"]` |
-| `defineSlot` twice for one div gives one slot | `false` | **`true`** |
-| `pubads().getSlots().length` after `addService` | `0` | `0` |
-| `slotRenderEnded` fires on `display()` | **never** | `isEmpty=true` |
-| `display()` leaves a `google_ads_iframe_*` | `false` | **`true`** |
-| `googletag.setConfig({…})` | **throws** - not a function | ok |
-| `pubads().isInitialLoadDisabled()` | **throws** - not a function | `false` |
+`n/a` throughout: this repo ships no GPT resource, so a page replacing gpt.js
+is served uBO's. The column is here so the answer to "where is this repo in
+this comparison" is stated rather than inferred.
 
 Identical in both: `cmd.push` runs its callback synchronously inside a
 `try`/`catch`, returns `1`, and drains whatever the page queued before the
@@ -51,24 +138,24 @@ AdGuard's slot events fire through `requestAnimationFrame`, so they are
 asynchronous - a page that calls `display()` and reads state on the next line
 sees nothing yet, in either resource.
 
-## The publisher-facing surface
+## gpt.js: the publisher-facing surface
 
 Method counts per object, and what is missing from the smaller one. AdGuard's
 is a strict superset: **uBO has no method AdGuard lacks, anywhere.**
 
-| object | uBO | AdGuard | only in AdGuard |
-|---|---|---|---|
-| `googletag` | 15 | 17 | `getConfig`, `setConfig` |
-| `pubads()` | 36 | 37 | `isInitialLoadDisabled` |
-| `defineSlot(…)` | 20 | 38 | `getClickUrl`, `getCollapseEmptyDiv`, `getConfig`, `getContentUrl`, `getDivStartsCollapsed`, `getEscapedQemQueryId`, `getFirstLook`, `getHtml`, `getId`, `getName`, `getOutOfPage`, `getServices`, `getSizes`, `getTargetingMap`, `setConfig`, `setSafeFrameConfig`, `setTagForChildDirectedTreatment`, `toString` |
-| `sizeMapping()` | 2 | 2 | - |
-| `companionAds()` | 3 | 5 | `getSlots`, `removeEventListener` |
-| `content()` | 2 | 3 | `removeEventListener` |
+| object | uBO | AdGuard | this repo | only in AdGuard |
+|---|---|---|---|---|
+| `googletag` | 15 | 17 | n/a | `getConfig`, `setConfig` |
+| `pubads()` | 36 | 37 | n/a | `isInitialLoadDisabled` |
+| `defineSlot(…)` | 20 | 38 | n/a | `getClickUrl`, `getCollapseEmptyDiv`, `getConfig`, `getContentUrl`, `getDivStartsCollapsed`, `getEscapedQemQueryId`, `getFirstLook`, `getHtml`, `getId`, `getName`, `getOutOfPage`, `getServices`, `getSizes`, `getTargetingMap`, `setConfig`, `setSafeFrameConfig`, `setTagForChildDirectedTreatment`, `toString` |
+| `sizeMapping()` | 2 | 2 | n/a | - |
+| `companionAds()` | 3 | 5 | n/a | `getSlots`, `removeEventListener` |
+| `content()` | 2 | 3 | n/a | `removeEventListener` |
 
 The slot is where the gap is: 20 methods against 38. That is also where
 publisher code spends its time, because a slot is the handle a page keeps.
 
-## Window variables
+## gpt.js: the globals each defines
 
 The same, which is worth saying because it is the part people assume differs:
 
@@ -158,7 +245,30 @@ was swapped in behind that page and the player reached the same state as under
 uBO's, with the same unrelated error. The page does not listen for
 `slotRenderEnded` at all. That breakage is still open.
 
-## Reproducing the table
+## Reproducing the tables
+
+The gtm.js table serves each resource as the `gtm.js` a page requests, behind
+Google's own snippet - including the anti-flicker block with the container id
+listed, which is the part that decides whether ending the hiding is this
+container's to do:
+
+```html
+<script>
+window.dataLayer = window.dataLayer || [];
+dataLayer.hide = { start: Date.now(), end: function(){ ended = true; },
+    'GTM-TEST001': true };
+dataLayer.push({ 'gtm.start': Date.now(), event: 'gtm.js' });
+function gtag(){ dataLayer.push(arguments); }
+</script>
+<script src="https://www.googletagmanager.com/gtm.js?id=GTM-TEST001"></script>
+```
+
+A second flavour of that fixture adds `'GTM-OTHER02': true` to the hide map,
+which is the row the three answer differently. AdGuard's resource is an ES
+module exporting a function, so its body is unwrapped with the helpers it
+imports (`noopFunc`, `noopNull`, `noopArray`, `hit`) defined as one-liners.
+
+## Reproducing the gpt.js table
 
 Needs a checkout of each project and any puppeteer. AdGuard's file is an ES
 module exporting a function, so its body has to be unwrapped with the handful
